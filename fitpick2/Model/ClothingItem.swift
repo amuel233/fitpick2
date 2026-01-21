@@ -21,15 +21,34 @@ enum ClothingCategory: String, CaseIterable, Identifiable {
         case .shoes: return "shoe"
         }
     }
+    
+    // Function to provide sub-categories based on gender
+    func subCategories(for gender: String) -> [String] {
+        switch (self, gender) {
+        case (.top, "Male"):
+            return ["T-Shirt", "Polo", "Polo Shirt", "Sando"]
+        case (.top, "Female"):
+            return ["T-Shirt", "Blouse", "Dress", "Cropped Top"]
+        case (.bottom, _):
+            return ["Shorts", "Pants"]
+        case (.shoes, "Male"):
+            return ["Sneakers", "Slippers", "Clogs"]
+        case (.shoes, "Female"):
+            return ["Sneakers", "Slippers", "Heels"]
+        default:
+            return []
+        }
+    }
 }
 
 struct ClothingItem: Identifiable, Equatable {
-    let id = UUID() // Unique identifier for every single upload
+    let id = UUID()
     let image: Image
     let uiImage: UIImage
     let category: ClothingCategory
-    
-    // Allows SwiftUI to compare two items and see if they are the exact same one
+    let subCategory: String // Added sub-category field
+    var remoteURL: String? = nil
+
     static func == (lhs: ClothingItem, rhs: ClothingItem) -> Bool {
         lhs.id == rhs.id
     }
