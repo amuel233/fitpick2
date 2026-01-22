@@ -14,10 +14,12 @@ import GoogleSignIn
 
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
-    @State private var email = ""
+    @EnvironmentObject var session: UserSession // Add this line
+    @State var email = ""
     @State private var password = ""
 
     var body: some View {
+        
         VStack(spacing: 20) {
             Text("Welcome Back")
                 .font(.largeTitle)
@@ -50,13 +52,13 @@ struct LoginView: View {
                                 }
 
                                 if let document = document, document.exists {
-                                    // ✅ User document already exists
+                                    // User document already exists
                                     print("User document already exists")
                                 } else {
-                                    // 🆕 Create new user document
+                                    // Create new user document
                                     userRef.setData([
                                         "email": userEmail,
-                                        "createdAt": Timestamp(),
+                                        "createdAt": Timestamp()
                                     ]) { error in
                                         if let error = error {
                                             print("Error creating user document:", error.localizedDescription)
@@ -96,6 +98,7 @@ struct LoginView: View {
 
                         guard let user = result?.user else { return }
                         let email = user.profile?.email
+                        session.email = email
                         print("Signed in as:", email ?? "")
                         appState.isLoggedIn = true
                         
@@ -105,7 +108,21 @@ struct LoginView: View {
                             .document(email ?? "")
                                         .setData([
                                             "email": email ?? "",
-                                            "createdAt": Timestamp()
+                                            "createdAt": Timestamp(),
+                                            "username": "",
+                                            "gender": "",
+                                            "selfie": "",
+                                            "measurements": [
+                                                    "height": 0,
+                                                    "bodyWeight": 0,
+                                                    "chest": 0,
+                                                    "shoulderWidth": 0,
+                                                    "armLength": 0,
+                                                    "waist": 0,
+                                                    "hips": 0,
+                                                    "inseam": 0,
+                                                    "shoeSize": 0
+                                                ]
                                         ], merge: true) { error in
                                             if let error = error {
                                                 print("Firestore error:", error)
@@ -115,7 +132,6 @@ struct LoginView: View {
                                             }
                                         }
                     }
-
             }
         }
         .padding()

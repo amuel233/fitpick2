@@ -13,7 +13,12 @@ class FirestoreManager: ObservableObject {
     
     // Create
     func addUser(documentID: String, email: String, selfie: String) {
-        let newUser = ["email":email, "selfie":selfie]
+        
+        let newUser = [
+            "email":email,
+            "selfie":selfie,
+        ]
+        
         db.collection("users").document(documentID).setData(newUser) { error in
                if let error = error {
                    print("Error creating document: \(error)")
@@ -22,5 +27,9 @@ class FirestoreManager: ObservableObject {
                }
            }
     }
+    
+    
+    
+    
     
 }

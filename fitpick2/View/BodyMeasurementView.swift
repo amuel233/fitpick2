@@ -1,7 +1,15 @@
 import SwiftUI
 import Foundation
+import FirebaseAuth
+import FirebaseFirestore
+import GoogleSignIn
 
 struct BodyMeasurementView: View {
+
+    @State private var username: String = ""
+    @State private var gender: String = "Male"
+    
+    @EnvironmentObject var session: UserSession // Access the session here
 
     @State private var username: String = ""
     @State private var gender: String = "Male"
@@ -64,7 +72,6 @@ struct BodyMeasurementView: View {
                         .frame(height: 190)
                         .offset(x: 0, y: 80)
 
-                    
                     MeasurementLine(label: "Shoulder", value: $shoulderWidth, unit: "cm", isVertical: false)
                         .frame(width: 100)
                         .offset(y: -130)
@@ -115,12 +122,62 @@ struct BodyMeasurementView: View {
                     Button(action: {
                         print("Saved Profile for: \(username)")
                         
+                        let db = Firestore.firestore()
+                        
+                        //Original code by Karry
+                        
+//                        //Save in Storage + Firestore
+//                        if let selfie = selectedSelfie {
+//                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
+//                                firestoreManager.addUser(
+//                                    documentID: "\(username)@gmail.com",
+//                                    email: "\(username)@gmail.com",
+//                                    selfie: downloadURL
+//                                )
+//                            }
+//                        }
+                        
+                        //Recommended code by Amuel
+                        
                         //Save in Storage + Firestore
                         if let selfie = selectedSelfie {
                             storageManager.upload(username: username, selfie: selfie) { downloadURL in
-                                firestoreManager.addUser(documentID: "\(username)@gmail.com", email: "\(username)@gmail.com", selfie: downloadURL)
+                                if let userEmail = session.email {
+                                    print("Current user email: \(session.email ?? "No email found")")
+                                    let userRef = db.collection("users").document(userEmail)
+                                    userRef.updateData([
+                                        "selfie": downloadURL
+                                    ])
+                                }
                             }
                         }
+                        
+                        if let userEmail = session.email {
+                            print("Current user email: \(session.email ?? "No email found")")
+                            let userRef = db.collection("users").document(userEmail)
+                            userRef.updateData([
+                                "gender": gender,
+                                "username": username,
+                                "measurements.height": height,
+                                "measurements.bodyWeight": bodyWeight,
+                                "measurements.chest": chest,
+                                "measurements.shoulderWidth": shoulderWidth,
+                                "measurements.armLength": armLength,
+                                "measurements.waist": waist,
+                                "measurements.hips": hips,
+                                "measurements.inseam": inseam,
+                                "measurements.shoeSize": shoeSize,
+                            ])
+                            { error in
+                                if let error = error {
+                                    print("Error updating height: \(error.localizedDescription)")
+                                } else {
+                                    print("Successfully updated height to \(height)!")
+                                }
+                            }
+                        }
+                                        
+                        
                     }) {
                         Text("Save")
                             .font(.headline)
