@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct BodyMeasurementView: View {
 
@@ -14,6 +15,12 @@ struct BodyMeasurementView: View {
     @State private var hips: Double = 95
     @State private var inseam: Double = 80
     @State private var shoeSize: Double = 9
+    
+    @State private var showImagePicker = false
+    @State private var selectedSelfie: UIImage? = nil
+    
+    @StateObject private var firestoreManager = FirestoreManager()
+    @StateObject private var storageManager = StorageManager()
 
     var body: some View {
         NavigationStack {
@@ -87,7 +94,10 @@ struct BodyMeasurementView: View {
                 }
                 
                 VStack(spacing: 12) {
-                    Button(action: { print("Selfie tapped") }) {
+                    Button(action: { print("Selfie tapped")
+                        //Camera
+                        showImagePicker = true
+                    }) {
                         Text("Selfie")
                             .font(.subheadline)
                             .fontWeight(.bold)
@@ -97,8 +107,21 @@ struct BodyMeasurementView: View {
                             .background(Color.blue.opacity(0.1))
                             .cornerRadius(12)
                     }
-
-                    Button(action: { print("Saved Profile: \(username)") }) {
+                    //Camera
+                    .sheet(isPresented: $showImagePicker) {
+                        ImagePicker(image: $selectedSelfie)
+                    }
+                    
+                    Button(action: {
+                        print("Saved Profile for: \(username)")
+                        
+                        //Save in Storage + Firestore
+                        if let selfie = selectedSelfie {
+                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
+                                firestoreManager.addUser(documentID: "\(username)@gmail.com", email: "\(username)@gmail.com", selfie: downloadURL)
+                            }
+                        }
+                    }) {
                         Text("Save")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
@@ -191,6 +214,38 @@ struct BlurView: UIViewRepresentable {
         UIVisualEffectView(effect: UIBlurEffect(style: style))
     }
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+}
+
+// UIImagePickerController setup for camera
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.presentationMode) var presentationMode
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            parent.image = info[.originalImage] as? UIImage
+            parent.presentationMode.wrappedValue.dismiss()
+        }
+    }
 }
 
 #Preview {
