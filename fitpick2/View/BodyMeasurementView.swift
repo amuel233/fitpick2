@@ -5,6 +5,9 @@ import FirebaseFirestore
 import GoogleSignIn
 
 struct BodyMeasurementView: View {
+
+    @State private var username: String = ""
+    @State private var gender: String = "Male"
     
     @EnvironmentObject var session: UserSession // Access the session here
 
