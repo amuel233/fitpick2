@@ -28,7 +28,32 @@ class FirestoreManager: ObservableObject {
            }
     }
     
-    
+    func fetchUserMeasurements(email: String, completion: @escaping ([String: Double]?) -> Void) {
+            let db = Firestore.firestore()
+            
+            db.collection("users").document(email).getDocument { document, error in
+                if let document = document, document.exists {
+                    // Get the 'measurements' map from the document
+                    let data = document.data()
+                    let measurements = data?["measurements"] as? [String: Any]
+                    print(measurements ?? "")
+                    
+                    // Convert [String: Any] to [String: Double]
+                    var result: [String: Double] = [:]
+                    measurements?.forEach { key, value in
+                        if let doubleValue = value as? Double {
+                            result[key] = doubleValue
+                        } else if let stringValue = value as? String, let doubleValue = Double(stringValue) {
+                            result[key] = doubleValue
+                        }
+                    }
+                    completion(result)
+                } else {
+                    print("Document does not exist")
+                    completion(nil)
+                }
+            }
+        }
     
     
     

@@ -8,11 +8,17 @@
 import SwiftUI
 import FirebaseStorage
 import FirebaseFirestore
+import FirebaseAILogic
 
 class ClosetViewModel: ObservableObject {
     @Published var clothingItems: [ClothingItem] = []
     @Published var isUploading = false
     @Published var userGender: String = "Male" // Default gender, should be set from BodyMeasurementView
+    
+    //Amuel - for AI-generate image display
+    @Published var generatedAvatar: UIImage? = nil
+        @Published var isLoading: Bool = false
+        @Published var errorMessage: String? = nil
     
     private let db = Firestore.firestore()
     private let storage = Storage.storage()

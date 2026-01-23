@@ -41,7 +41,6 @@ struct ClosetHeaderView: View {
                         .foregroundColor(.secondary)
                     )
             }
-
             VStack {
                 Spacer()
                 HStack {
