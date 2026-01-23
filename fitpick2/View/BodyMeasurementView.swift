@@ -10,25 +10,6 @@ struct BodyMeasurementView: View {
     @State private var gender: String = "Male"
     
     @EnvironmentObject var session: UserSession // Access the session here
-
-    @State private var username: String = ""
-    @State private var gender: String = "Male"
-    
-    @State private var height: Double = 175
-    @State private var bodyWeight: Double = 70
-    @State private var chest: Double = 90
-    @State private var shoulderWidth: Double = 45
-    @State private var armLength: Double = 60
-    @State private var waist: Double = 80
-    @State private var hips: Double = 95
-    @State private var inseam: Double = 80
-    @State private var shoeSize: Double = 9
-    
-    @EnvironmentObject var session: UserSession // Access the session here
-    @StateObject private var viewModel = BodyMeasurementViewModel()
-
-    @State private var username: String = ""
-    @State private var gender: String = "Male"
     
     @State private var height: Double = 175
     @State private var bodyWeight: Double = 70
@@ -54,7 +35,7 @@ struct BodyMeasurementView: View {
                     Text("User Information")
                         .font(.system(size: 34, weight: .bold))
                         .padding(.top, 10)
-                    
+
                     TextField("Username", text: $username)
                         .padding()
                         .background(Color(.secondarySystemBackground))
@@ -67,7 +48,7 @@ struct BodyMeasurementView: View {
                     .pickerStyle(.segmented)
                 }
                 .padding(.horizontal)
-                
+
                 ZStack {
                     Image(gender)
                         .resizable()
@@ -79,15 +60,15 @@ struct BodyMeasurementView: View {
                     MeasurementLine(label: "Height", value: $height, unit: "cm", isVertical: true)
                         .frame(height: 380)
                         .offset(x: -165, y: -17)
-                    
+
                     MeasurementLine(label: "Arm", value: $armLength, unit: "cm", isVertical: true)
                         .frame(height: 160)
                         .offset(x: -70, y: -70)
-                    
+
                     MeasurementLine(label: "Inseam", value: $inseam, unit: "cm", isVertical: true)
                         .frame(height: 190)
                         .offset(x: 0, y: 80)
-                    
+
                     MeasurementLine(label: "Shoulder", value: $shoulderWidth, unit: "cm", isVertical: false)
                         .frame(width: 100)
                         .offset(y: -130)
@@ -99,11 +80,11 @@ struct BodyMeasurementView: View {
                     MeasurementLine(label: "Waist", value: $waist, unit: "cm", isVertical: false)
                         .frame(width: 50)
                         .offset(y: -65)
-                    
+
                     MeasurementLine(label: "Hips", value: $hips, unit: "cm", isVertical: false)
                         .frame(width: 75)
                         .offset(y: -30)
-                    
+
                     VStack {
                         Spacer()
                         HStack {
@@ -142,16 +123,16 @@ struct BodyMeasurementView: View {
                         
                         //Original code by Karry
                         
-                        //                        //Save in Storage + Firestore
-                        //                        if let selfie = selectedSelfie {
-                        //                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
-                        //                                firestoreManager.addUser(
-                        //                                    documentID: "\(username)@gmail.com",
-                        //                                    email: "\(username)@gmail.com",
-                        //                                    selfie: downloadURL
-                        //                                )
-                        //                            }
-                        //                        }
+//                        //Save in Storage + Firestore
+//                        if let selfie = selectedSelfie {
+//                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
+//                                firestoreManager.addUser(
+//                                    documentID: "\(username)@gmail.com",
+//                                    email: "\(username)@gmail.com",
+//                                    selfie: downloadURL
+//                                )
+//                            }
+//                        }
                         
                         //Recommended code by Amuel
                         
@@ -192,10 +173,8 @@ struct BodyMeasurementView: View {
                                 }
                             }
                         }
+                                        
                         
-                        Task {
-                            await viewModel.generateAvatar()
-                        }
                     }) {
                         Text("Save")
                             .font(.headline)
@@ -212,8 +191,8 @@ struct BodyMeasurementView: View {
             }
         }
     }
-    }
-    
+}
+
 struct MeasurementLine: View {
     let label: String
     @Binding var value: Double
@@ -324,5 +303,5 @@ struct ImagePicker: UIViewControllerRepresentable {
 }
 
 #Preview {
-//    BodyMeasurementView( viewModel: BodyMeasurementViewModel).environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    BodyMeasurementView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }
