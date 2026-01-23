@@ -27,6 +27,40 @@ class FirestoreManager: ObservableObject {
                }
            }
     }
+
+    // Fetch today's hero outfit image name or url from `recommendations/today`
+    func fetchHeroImageName(completion: @escaping (String?) -> Void) {
+        let docRef = db.collection("recommendations").document("today")
+        docRef.getDocument { snapshot, error in
+            if let data = snapshot?.data(), let imageName = data["imageName"] as? String {
+                completion(imageName)
+            } else {
+                completion(nil)
+            }
+        }
+    }
+
+    // Fetch wardrobe counts (e.g., shoes by subCategory) to help gap detection
+    func fetchWardrobeCounts(completion: @escaping ([String: Int]) -> Void) {
+        db.collection("clothes").getDocuments { snapshot, error in
+            var counts: [String: Int] = [:]
+            guard let docs = snapshot?.documents else {
+                completion(counts)
+                return
+            }
+
+            for doc in docs {
+                let data = doc.data()
+                let category = data["category"] as? String ?? ""
+                let subCategory = data["subCategory"] as? String ?? ""
+
+                if category == "Shoes" {
+                    counts[subCategory, default: 0] += 1
+                }
+            }
+            completion(counts)
+        }
+    }
     
     func fetchUserMeasurements(email: String, completion: @escaping ([String: Double]?) -> Void) {
             let db = Firestore.firestore()

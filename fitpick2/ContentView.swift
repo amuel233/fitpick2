@@ -20,48 +20,54 @@ struct ContentView: View {
     private var items: FetchedResults<Item>
     
     var body: some View {
-        TabView {
+        TabView(selection: .constant(0)) {
             HomeView()
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
+                .tag(0)
+
             ClosetView()
                 .tabItem {
                     Label("Closet", systemImage: "hanger")
                 }
+                .tag(1)
+
             SocialsView()
                 .tabItem {
                     Label("Socials", systemImage: "person.2")
                 }
+                .tag(2)
+
             BodyMeasurementView()
                 .tabItem {
                     Label("Body Mesaurement", systemImage: "ruler")
                 }
+                .tag(3)
         }
     }
 }
 
 struct MainTabView: View {
+    @EnvironmentObject var appState: AppState
+
     var body: some View {
-        TabView {
+        TabView(selection: $appState.selectedTab) {
             HomeView()
-                .tabItem {
-                    Label("Home", systemImage: "house")
-                }
+                .tabItem { Label("Home", systemImage: "house") }
+                .tag(0)
 
             ClosetView()
-                .tabItem {
-                    Label("Closet", systemImage: "hanger")
-                }
+                .tabItem { Label("Closet", systemImage: "hanger") }
+                .tag(1)
 
             SocialsView()
-                .tabItem {
-                    Label("Socials", systemImage: "person.2")
-                }
+                .tabItem { Label("Socials", systemImage: "person.2") }
+                .tag(2)
+
             BodyMeasurementView()
-                .tabItem {
-                    Label("Body Mesaurement", systemImage: "ruler")
-                }
+                .tabItem { Label("Body Mesaurement", systemImage: "ruler") }
+                .tag(3)
         }
     }
 }
