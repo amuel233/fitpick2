@@ -5,6 +5,24 @@ import FirebaseFirestore
 import GoogleSignIn
 
 struct BodyMeasurementView: View {
+
+    @State private var username: String = ""
+    @State private var gender: String = "Male"
+    
+    @EnvironmentObject var session: UserSession // Access the session here
+
+    @State private var username: String = ""
+    @State private var gender: String = "Male"
+    
+    @State private var height: Double = 175
+    @State private var bodyWeight: Double = 70
+    @State private var chest: Double = 90
+    @State private var shoulderWidth: Double = 45
+    @State private var armLength: Double = 60
+    @State private var waist: Double = 80
+    @State private var hips: Double = 95
+    @State private var inseam: Double = 80
+    @State private var shoeSize: Double = 9
     
     @EnvironmentObject var session: UserSession // Access the session here
     @StateObject private var viewModel = BodyMeasurementViewModel()
