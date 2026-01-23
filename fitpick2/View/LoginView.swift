@@ -6,16 +6,17 @@
 //
 
 import SwiftUI
+import CoreData
 import FirebaseAuth
 import FirebaseFirestore
 import GoogleSignIn
+
 
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var session: UserSession // Add this line
     @State var email = ""
     @State private var password = ""
-    @State private var errorMessage = ""
 
     var body: some View {
         
@@ -27,24 +28,18 @@ struct LoginView: View {
             TextField("Email", text: $email)
                 .textFieldStyle(.roundedBorder)
                 .autocapitalization(.none)
-                .keyboardType(.emailAddress)
 
             SecureField("Password", text: $password)
                 .textFieldStyle(.roundedBorder)
 
-            if !errorMessage.isEmpty {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-                    .font(.caption)
-            }
-
-            // MARK: - Email/Password Login
             Button("Log In") {
                 Auth.auth().signIn(withEmail: email, password: password) { authResult, error in
                     if let error = error {
-                        self.errorMessage = error.localizedDescription
+                        print("Login error:", error.localizedDescription)
                         return
                     }
+                    // Login successful
+                    appState.isLoggedIn = true
                     
                     let db = Firestore.firestore()
                             let userEmail = email.lowercased()
@@ -74,9 +69,6 @@ struct LoginView: View {
                                 }
                     }
                     
-                    session.email = verifiedEmail
-                    syncUserToFirestore(email: verifiedEmail)
-                    appState.isLoggedIn = true
                 }
             }
             .frame(maxWidth: .infinity)
@@ -85,18 +77,24 @@ struct LoginView: View {
             .foregroundColor(.white)
             .cornerRadius(10)
             
-            // MARK: - Google Login
             Button("Log in with Google") {
-                handleGoogleSignIn()
-            }
-        }
-        .padding()
-    }
+                guard let rootViewController = UIApplication.shared
+                        .connectedScenes
+                        .compactMap({ $0 as? UIWindowScene })
+                        .first?
+                        .windows
+                        .first?
+                        .rootViewController else {
+                            return
+                    }
 
-    // MARK: - Firestore Sync Logic
-    private func syncUserToFirestore(email: String) {
-        let db = Firestore.firestore()
-        let userRef = db.collection("users").document(email)
+                    GIDSignIn.sharedInstance.signIn(
+                        withPresenting: rootViewController
+                    ) { result, error in
+                        if let error = error {
+                            print(error.localizedDescription)
+                            return
+                        }
 
                         guard let user = result?.user else { return }
                         let email = user.profile?.email
@@ -135,12 +133,7 @@ struct LoginView: View {
                                         }
                     }
             }
-
-            guard let user = result?.user, let email = user.profile?.email.lowercased() else { return }
-            
-            session.email = email
-            syncUserToFirestore(email: email)
-            appState.isLoggedIn = true
         }
+        .padding()
     }
 }
