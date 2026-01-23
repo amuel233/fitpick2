@@ -30,12 +30,14 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct fitpick2App: App {
     let persistenceController = PersistenceController.shared
     @StateObject private var appState = AppState()
+    @StateObject var session = UserSession()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
+                .environmentObject(session)
         }
     }
 }
