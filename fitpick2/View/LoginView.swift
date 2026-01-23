@@ -6,18 +6,19 @@
 //
 
 import SwiftUI
-import CoreData
 import FirebaseAuth
 import FirebaseFirestore
 import GoogleSignIn
 
-
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
-    @State private var email = ""
+    @EnvironmentObject var session: UserSession // Add this line
+    @State var email = ""
     @State private var password = ""
+    @State private var errorMessage = ""
 
     var body: some View {
+        
         VStack(spacing: 20) {
             Text("Welcome Back")
                 .font(.largeTitle)
@@ -26,18 +27,24 @@ struct LoginView: View {
             TextField("Email", text: $email)
                 .textFieldStyle(.roundedBorder)
                 .autocapitalization(.none)
+                .keyboardType(.emailAddress)
 
             SecureField("Password", text: $password)
                 .textFieldStyle(.roundedBorder)
 
+            if !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .font(.caption)
+            }
+
+            // MARK: - Email/Password Login
             Button("Log In") {
                 Auth.auth().signIn(withEmail: email, password: password) { authResult, error in
                     if let error = error {
-                        print("Login error:", error.localizedDescription)
+                        self.errorMessage = error.localizedDescription
                         return
                     }
-                    // Login successful
-                    appState.isLoggedIn = true
                     
                     let db = Firestore.firestore()
                             let userEmail = email.lowercased()
@@ -50,13 +57,13 @@ struct LoginView: View {
                                 }
 
                                 if let document = document, document.exists {
-                                    // ✅ User document already exists
+                                    // User document already exists
                                     print("User document already exists")
                                 } else {
-                                    // 🆕 Create new user document
+                                    // Create new user document
                                     userRef.setData([
                                         "email": userEmail,
-                                        "createdAt": Timestamp(),
+                                        "createdAt": Timestamp()
                                     ]) { error in
                                         if let error = error {
                                             print("Error creating user document:", error.localizedDescription)
@@ -67,6 +74,9 @@ struct LoginView: View {
                                 }
                     }
                     
+                    session.email = verifiedEmail
+                    syncUserToFirestore(email: verifiedEmail)
+                    appState.isLoggedIn = true
                 }
             }
             .frame(maxWidth: .infinity)
@@ -75,27 +85,22 @@ struct LoginView: View {
             .foregroundColor(.white)
             .cornerRadius(10)
             
+            // MARK: - Google Login
             Button("Log in with Google") {
-                guard let rootViewController = UIApplication.shared
-                        .connectedScenes
-                        .compactMap({ $0 as? UIWindowScene })
-                        .first?
-                        .windows
-                        .first?
-                        .rootViewController else {
-                            return
-                    }
+                handleGoogleSignIn()
+            }
+        }
+        .padding()
+    }
 
-                    GIDSignIn.sharedInstance.signIn(
-                        withPresenting: rootViewController
-                    ) { result, error in
-                        if let error = error {
-                            print(error.localizedDescription)
-                            return
-                        }
+    // MARK: - Firestore Sync Logic
+    private func syncUserToFirestore(email: String) {
+        let db = Firestore.firestore()
+        let userRef = db.collection("users").document(email)
 
                         guard let user = result?.user else { return }
                         let email = user.profile?.email
+                        session.email = email
                         print("Signed in as:", email ?? "")
                         appState.isLoggedIn = true
                         
@@ -105,7 +110,21 @@ struct LoginView: View {
                             .document(email ?? "")
                                         .setData([
                                             "email": email ?? "",
-                                            "createdAt": Timestamp()
+                                            "createdAt": Timestamp(),
+                                            "username": "",
+                                            "gender": "",
+                                            "selfie": "",
+                                            "measurements": [
+                                                    "height": 0,
+                                                    "bodyWeight": 0,
+                                                    "chest": 0,
+                                                    "shoulderWidth": 0,
+                                                    "armLength": 0,
+                                                    "waist": 0,
+                                                    "hips": 0,
+                                                    "inseam": 0,
+                                                    "shoeSize": 0
+                                                ]
                                         ], merge: true) { error in
                                             if let error = error {
                                                 print("Firestore error:", error)
@@ -115,9 +134,13 @@ struct LoginView: View {
                                             }
                                         }
                     }
-
             }
+
+            guard let user = result?.user, let email = user.profile?.email.lowercased() else { return }
+            
+            session.email = email
+            syncUserToFirestore(email: email)
+            appState.isLoggedIn = true
         }
-        .padding()
     }
 }
