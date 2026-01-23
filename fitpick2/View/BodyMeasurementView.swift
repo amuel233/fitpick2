@@ -10,9 +10,6 @@ struct BodyMeasurementView: View {
     @State private var gender: String = "Male"
     
     @EnvironmentObject var session: UserSession // Access the session here
-
-    @State private var username: String = ""
-    @State private var gender: String = "Male"
     
     @State private var height: Double = 175
     @State private var bodyWeight: Double = 70

@@ -18,7 +18,13 @@ class UserSession: ObservableObject {
     @Published var email: String?
     
     init() {
-        // Automatically check if a user is already signed in
-        self.email = Auth.auth().currentUser?.email
+        // Try Firebase Auth first, then fallback to persisted Google sign-in email
+        if let firebaseEmail = Auth.auth().currentUser?.email {
+            self.email = firebaseEmail
+        } else if let persisted = UserDefaults.standard.string(forKey: "signedInEmail") {
+            self.email = persisted
+        } else {
+            self.email = nil
+        }
     }
 }

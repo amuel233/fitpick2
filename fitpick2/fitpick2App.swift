@@ -44,6 +44,7 @@ struct fitpick2App: App {
 
 class AppState: ObservableObject {
     @Published var isLoggedIn: Bool = false
+    @Published var selectedTab: Int = 0 // 0: Home, 1: Closet, 2: Socials, 3: BodyMeasurement
 }
 
 
