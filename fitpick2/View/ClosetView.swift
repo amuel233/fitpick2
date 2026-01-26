@@ -11,154 +11,236 @@ import PhotosUI
 struct ClosetView: View {
     @StateObject private var viewModel = ClosetViewModel()
     
-    // User Portrait State
+    // UI & Portrait State
     @State private var userPortrait: UIImage? = nil
-    @State private var selectedPortraitItem: PhotosPickerItem? = nil
-    
-    // UI Interaction States
     @State private var selectedItemID: UUID? = nil
+    
+    // Camera & Upload State
     @State private var showCamera = false
     @State private var capturedImage: UIImage?
-    @State private var itemToDelete: ClothingItem?
-    @State private var showingDeleteAlert = false
     
-    // Sequential Selection States for Add Clothing
+    // Dialog & Alert State
     @State private var showingCategorySelection = false
     @State private var selectedCategory: ClothingCategory?
     @State private var showingSubCategorySelection = false
+    @State private var itemToDelete: ClothingItem?
+    @State private var showingDeleteAlert = false
 
     var body: some View {
         NavigationStack {
             List {
-                // SECTION 1: Portrait Header
+                // Header
                 Section {
-                    PhotosPicker(selection: $selectedPortraitItem, matching: .images) {
-                        ClosetHeaderView(portraitImage: userPortrait != nil ? Image(uiImage: userPortrait!) : nil)
-                    }
+                    ClosetHeaderView(portraitImage: userPortrait != nil ? Image(uiImage: userPortrait!) : nil)
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
 
-                // SECTION 2: Action Buttons (Try On & Add)
-                Section {
-                    HStack(spacing: 12) {
-                        Button(action: { /* Trigger AI Try-On Logic */ }) {
-                            Label("Try On", systemImage: "sparkles")
-                                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                                .background(Color.purple.opacity(0.1)).cornerRadius(12)
-                        }
-                        
-                        Button(action: { showCamera = true }) {
-                            if viewModel.isUploading {
-                                ProgressView()
-                            } else {
-                                Label("Add Clothing", systemImage: "camera.fill")
-                            }
-                        }
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(12)
-                        .disabled(viewModel.isUploading)
-                    }
-                }
-                .listRowSeparator(.hidden)
+                // Action Buttons
+                ClosetActionButtons(
+                    selectedItemID: selectedItemID,
+                    isUploading: viewModel.isUploading,
+                    showCamera: $showCamera
+                )
 
-                // SECTION 3: Categorized Inventory with Sub-Category Labels
-                ForEach(ClothingCategory.allCases) { category in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(category.rawValue, systemImage: category.icon)
-                            .font(.subheadline).bold().padding(.horizontal)
-                        
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                let filtered = viewModel.clothingItems.filter { $0.category == category }
-                                
-                                ForEach(filtered) { item in
-                                    VStack(alignment: .center, spacing: 4) {
-                                        ZStack(alignment: .topTrailing) {
-                                            item.image
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 100, height: 130)
-                                                .background(Color.secondary.opacity(0.1))
-                                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(selectedItemID == item.id ? Color.blue : Color.clear, lineWidth: 3)
-                                                )
-                                                .onTapGesture { selectedItemID = item.id }
-
-                                            // Delete Button
-                                            Button {
-                                                itemToDelete = item
-                                                showingDeleteAlert = true
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.red)
-                                                    .background(Circle().fill(Color.white))
-                                            }
-                                            .offset(x: 5, y: -5)
-                                        }
-                                        
-                                        // Display Sub-category Label
-                                        Text(item.subCategory)
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                            .padding(.top, 10)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+                // Collapsible Inventory List
+                InventoryList(
+                    viewModel: viewModel,
+                    selectedItemID: $selectedItemID,
+                    itemToDelete: $itemToDelete,
+                    showingDeleteAlert: $showingDeleteAlert
+                )
             }
+            .listStyle(.plain)
             .navigationTitle("Closet")
-            // Camera Sheet
+            .onAppear {
+                viewModel.fetchUserGender()
+            }
             .sheet(isPresented: $showCamera) {
                 CameraPicker(selectedImage: $capturedImage)
             }
-            // Step 1: Main Category Selection
             .onChange(of: capturedImage) { _, newValue in
                 if newValue != nil { showingCategorySelection = true }
             }
-            .confirmationDialog("Select Main Category", isPresented: $showingCategorySelection) {
-                ForEach(ClothingCategory.allCases) { category in
-                    Button(category.rawValue) {
-                        selectedCategory = category
-                        showingSubCategorySelection = true
-                    }
-                }
+            .confirmationDialog("Category", isPresented: $showingCategorySelection) {
+                categoryDialogButtons
             }
-            // Step 2: Gender-Based Sub-Category Selection
-            .confirmationDialog("Select Style", isPresented: $showingSubCategorySelection) {
-                if let category = selectedCategory {
-                    ForEach(category.subCategories(for: viewModel.userGender), id: \.self) { subCat in
-                        Button(subCat) {
-                            if let img = capturedImage {
-                                viewModel.uploadClothing(uiImage: img, category: category, subCategory: subCat)
-                                capturedImage = nil // Reset after starting upload
-                            }
-                        }
-                    }
-                }
+            .confirmationDialog("Style", isPresented: $showingSubCategorySelection) {
+                subCategoryDialogButtons
             }
-            // Portrait and Deletion Handlers
-            .onChange(of: selectedPortraitItem) { _, _ in handlePortraitSelection() }
             .alert("Delete Item?", isPresented: $showingDeleteAlert, presenting: itemToDelete) { item in
                 Button("Delete", role: .destructive) { viewModel.deleteItem(item) }
             }
         }
     }
-    
-    // Private Helper for Portrait (MVVM: This should eventually move to ViewModel)
-    private func handlePortraitSelection() {
-        Task {
-            if let data = try? await selectedPortraitItem?.loadTransferable(type: Data.self),
-               let uiImage = UIImage(data: data) {
-                await MainActor.run { self.userPortrait = uiImage }
+
+    @ViewBuilder
+    private var categoryDialogButtons: some View {
+        ForEach(ClothingCategory.allCases) { category in
+            Button(category.rawValue) {
+                selectedCategory = category
+                showingSubCategorySelection = true
             }
+        }
+    }
+
+    @ViewBuilder
+    private var subCategoryDialogButtons: some View {
+        if let category = selectedCategory {
+            ForEach(category.subCategories(for: viewModel.userGender), id: \.self) { subCat in
+                Button(subCat) {
+                    if let img = capturedImage {
+                        viewModel.uploadClothing(uiImage: img, category: category, subCategory: subCat)
+                        capturedImage = nil
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Sub-View: Action Buttons
+struct ClosetActionButtons: View {
+    let selectedItemID: UUID?
+    let isUploading: Bool
+    @Binding var showCamera: Bool
+
+    var body: some View {
+        Section {
+            HStack(spacing: 12) {
+                Button(action: { print("Try On") }) {
+                    Label("Try On", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(Color.purple.opacity(0.1))
+                        .foregroundColor(.purple)
+                        .cornerRadius(12)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+
+                Button(action: { showCamera = true }) {
+                    if isUploading {
+                        ProgressView()
+                    } else {
+                        Label("Add Clothing", systemImage: "camera.fill")
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.blue.opacity(0.1))
+                            .foregroundColor(.blue)
+                            .cornerRadius(12)
+                    }
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .disabled(isUploading)
+            }
+        }
+        .listRowSeparator(.hidden)
+    }
+}
+
+// MARK: - Sub-View: Inventory List
+struct InventoryList: View {
+    @ObservedObject var viewModel: ClosetViewModel
+    @Binding var selectedItemID: UUID?
+    @Binding var itemToDelete: ClothingItem?
+    @Binding var showingDeleteAlert: Bool
+
+    var body: some View {
+        ForEach(ClothingCategory.allCases) { category in
+            CategoryInventoryRow(
+                category: category,
+                viewModel: viewModel,
+                selectedItemID: $selectedItemID,
+                itemToDelete: $itemToDelete,
+                showingDeleteAlert: $showingDeleteAlert
+            )
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+        }
+    }
+}
+
+// MARK: - Sub-View: Row Layout (Reverted to Stable Logic)
+struct CategoryInventoryRow: View {
+    let category: ClothingCategory
+    @ObservedObject var viewModel: ClosetViewModel
+    @Binding var selectedItemID: UUID?
+    @Binding var itemToDelete: ClothingItem?
+    @Binding var showingDeleteAlert: Bool
+    
+    @State private var isExpanded: Bool = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header Toggle
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    Label(category.rawValue, systemImage: category.icon)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    // Down when collapsed, Right when expanded
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : 90))
+                }
+                .padding(.vertical, 15)
+                .padding(.horizontal, 20)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 25) {
+                    let subCats = category.subCategories(for: viewModel.userGender)
+                    
+                    ForEach(subCats, id: \.self) { subName in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(subName)
+                                .font(.caption).bold().foregroundColor(.secondary).padding(.horizontal, 20)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    let filtered = viewModel.clothingItems.filter {
+                                        $0.category == category && $0.subCategory == subName
+                                    }
+                                    
+                                    if filtered.isEmpty {
+                                        Text("No \(subName)").font(.system(size: 10)).foregroundColor(.gray)
+                                            .frame(width: 100, height: 130).background(Color.secondary.opacity(0.05)).cornerRadius(12)
+                                    } else {
+                                        ForEach(filtered) { item in
+                                            inventoryItem(item)
+                                        }
+                                    }
+                                }.padding(.horizontal, 20)
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 20)
+                .transition(.opacity)
+            }
+            
+            Divider().padding(.horizontal, 20)
+        }
+    }
+
+    private func inventoryItem(_ item: ClothingItem) -> some View {
+        ZStack(alignment: .topTrailing) {
+            item.image.resizable().scaledToFit().frame(width: 100, height: 130)
+                .background(Color.secondary.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(selectedItemID == item.id ? Color.blue : Color.clear, lineWidth: 3))
+                .onTapGesture { selectedItemID = item.id }
+
+            Button { itemToDelete = item; showingDeleteAlert = true } label: {
+                Image(systemName: "xmark.circle.fill").foregroundColor(.red).background(Circle().fill(Color.white))
+            }.offset(x: 5, y: -5)
         }
     }
 }
