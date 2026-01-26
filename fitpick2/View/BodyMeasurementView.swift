@@ -9,7 +9,7 @@ struct BodyMeasurementView: View {
     @State private var username: String = ""
     @State private var gender: String = "Male"
     
-    @EnvironmentObject var session: UserSession // Access the session here
+    @EnvironmentObject var session: UserSession
     
     @State private var height: Double = 175
     @State private var bodyWeight: Double = 70
@@ -120,21 +120,6 @@ struct BodyMeasurementView: View {
                         print("Saved Profile for: \(username)")
                         
                         let db = Firestore.firestore()
-                        
-                        //Original code by Karry
-                        
-//                        //Save in Storage + Firestore
-//                        if let selfie = selectedSelfie {
-//                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
-//                                firestoreManager.addUser(
-//                                    documentID: "\(username)@gmail.com",
-//                                    email: "\(username)@gmail.com",
-//                                    selfie: downloadURL
-//                                )
-//                            }
-//                        }
-                        
-                        //Recommended code by Amuel
                         
                         //Save in Storage + Firestore
                         if let selfie = selectedSelfie {
