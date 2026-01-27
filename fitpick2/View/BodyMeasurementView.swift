@@ -8,18 +8,19 @@ struct BodyMeasurementView: View {
 
     @State private var username: String = ""
     @State private var gender: String = "Male"
+    @State private var showAutoMeasure = false // 1. State to control the view
     
     @EnvironmentObject var session: UserSession
     
-    @State private var height: Double = 175
-    @State private var bodyWeight: Double = 70
-    @State private var chest: Double = 90
-    @State private var shoulderWidth: Double = 45
-    @State private var armLength: Double = 60
-    @State private var waist: Double = 80
-    @State private var hips: Double = 95
-    @State private var inseam: Double = 80
-    @State private var shoeSize: Double = 9
+    @State private var height: Double = 0 //ok
+    @State private var bodyWeight: Double = 0 //ok
+    @State private var chest: Double = 0
+    @State private var shoulderWidth: Double = 0
+    @State private var armLength: Double = 0 //ok
+    @State private var waist: Double = 0 //ok
+    @State private var hips: Double = 0
+    @State private var inseam: Double = 0 //ok
+    @State private var shoeSize: Double = 0 //ok
     
     @State private var showImagePicker = false
     @State private var selectedSelfie: UIImage? = nil
@@ -46,8 +47,37 @@ struct BodyMeasurementView: View {
                         Text("Female").tag("Female")
                     }
                     .pickerStyle(.segmented)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        showAutoMeasure = true // 3. Trigger the action
+                    }) {
+                        Text("Auto-Measure")
+                            .fontWeight(.semibold)
+                            .frame(minWidth: 120)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    Spacer()
                 }
                 .padding(.horizontal)
+                .fullScreenCover(isPresented: $showAutoMeasure) {
+ 
+                    AutoMeasureView(onCapture: { h, w, i, a, s, c, hi in
+                            self.height = h
+                            self.waist = w
+                            self.inseam = i
+                            self.armLength = a
+                            self.shoulderWidth = s
+                            self.chest = c
+                            self.hips = hi
+                        
+                            showAutoMeasure = false
+                        })
+                }
 
                 ZStack {
                     Image(gender)
@@ -118,6 +148,10 @@ struct BodyMeasurementView: View {
                     
                     Button(action: {
                         print("Saved Profile for: \(username)")
+                        guard let userEmail = session.email, !userEmail.isEmpty else {
+                                print("Save Failed: session.email is nil")
+                                return
+                            }
                         
                         let db = Firestore.firestore()
                         
@@ -172,6 +206,7 @@ struct BodyMeasurementView: View {
                     .disabled(username.isEmpty)
                 }
                 .padding(.horizontal)
+                .padding(.vertical)
                 .padding(.bottom, 20)
             }
         }
