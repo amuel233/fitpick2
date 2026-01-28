@@ -25,7 +25,7 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             // Apply the theme background
-            fitPickBlack.ignoresSafeArea()
+            Color(red: 26/255, green: 26/255, blue: 27/255).ignoresSafeArea()
             
             VStack(spacing: 25) {
                 // Header section with Logo and Title
@@ -66,7 +66,7 @@ struct LoginView: View {
 
                 // Primary Login Button using Brand Gold
                 Button(action: {
-                    auth.login(email: email, password: password, session: session)
+                    auth.login(email: email, password: password)
                 }) {
                     Text("Log In")
                         .fontWeight(.bold)
@@ -84,7 +84,7 @@ struct LoginView: View {
 
                 // Google Sign-In Button with Gold Border
                 Button(action: {
-                    auth.loginWithGoogle(session: session)
+                    auth.loginWithGoogle()
                 }) {
                     HStack {
                         Image(systemName: "globe")
@@ -104,7 +104,7 @@ struct LoginView: View {
                 // Face ID Section - Only visible if user has logged in successfully before
                 if auth.hasLoggedInBefore {
                     Button(action: {
-                        auth.loginWithBiometrics(session: session)
+                        auth.loginWithBiometrics()
                     }) {
                         VStack(spacing: 8) {
                             Image(systemName: "faceid")
@@ -121,14 +121,8 @@ struct LoginView: View {
             }
         }
         .onAppear {
-            // 1. AuthManager success trigger to the UI navigation
-            auth.onLoginSuccess = {
-                appState.isLoggedIn = true
-            }
-            
-            // 2. Auto-prompt Face ID if it's a returning user
             if auth.hasLoggedInBefore {
-                auth.loginWithBiometrics(session: session)
+                auth.loginWithBiometrics()
             }
         }
     }

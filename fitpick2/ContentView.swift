@@ -41,16 +41,16 @@ struct MainTabView: View {
                         .tabItem { Label("Home", systemImage: "house") }
                         .tag(0)
 
+                    BodyMeasurementView()
+                        .tabItem { Label("Body Measurement", systemImage: "ruler") }
+                        .tag(1)
+                    
                     ClosetView()
                         .tabItem { Label("Closet", systemImage: "hanger") }
-                        .tag(1)
-
+                        .tag(2)
+                    
                     SocialsView()
                         .tabItem { Label("Socials", systemImage: "person.2") }
-                        .tag(2)
-
-                    BodyMeasurementView()
-                        .tabItem { Label("Body", systemImage: "ruler") }
                         .tag(3)
                 }
                 .accentColor(fitPickGold) // Sets active tab icon and text to gold
@@ -59,7 +59,7 @@ struct MainTabView: View {
                 // Global Logout Button
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
-                        auth.logout(appState: appState, session: session)
+                        auth.logout()
                     }) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .foregroundColor(.red)
