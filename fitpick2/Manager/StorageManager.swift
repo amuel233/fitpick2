@@ -9,10 +9,10 @@ import SwiftUI
 import FirebaseStorage
 
 class StorageManager: ObservableObject {
-    let storage = Storage.storage()
+    private let storage = Storage.storage().reference()
     
-    func upload(username: String, selfie: UIImage, completion: @escaping(String) -> Void) {
-        let storageRef = storage.reference().child("\(username)/selfie.jpg")
+    func uploadSelfie(email: String, selfie: UIImage, completion: @escaping(String) -> Void) {
+        let storageRef = storage.child("users/\(email)/selfie.jpg")
         
         let data = selfie.jpegData(compressionQuality: 0.2)
         let metadata = StorageMetadata()
@@ -36,4 +36,28 @@ class StorageManager: ObservableObject {
             }
         }
     }
+    
+    func uploadSocial(email: String, ootd: UIImage, completion: @escaping (String) -> Void) {
+            // Convert image to data
+            guard let imageData = ootd.jpegData(compressionQuality: 0.5) else { return }
+            
+            // Create a unique path for the post image
+            let path = "socials/\(email)_\(UUID().uuidString).jpg"
+            let fileRef = storage.child(path)
+            
+            // Upload the data
+            fileRef.putData(imageData, metadata: nil) { metadata, error in
+                if let error = error {
+                    print("Upload error: \(error.localizedDescription)")
+                    return
+                }
+                
+                // Fetch the URL to save in Firestore
+                fileRef.downloadURL { url, error in
+                    if let urlString = url?.absoluteString {
+                        completion(urlString)
+                    }
+                }
+            }
+        }
 }

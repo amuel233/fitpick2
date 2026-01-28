@@ -6,10 +6,14 @@
 //
 
 import FirebaseFirestore
+import SwiftUI
 
 class FirestoreManager: ObservableObject {
     private var db = Firestore.firestore()
+    private var listener: ListenerRegistration?
+    
     @Published var users = [User]()
+    @Published var posts: [SocialsPost] = []
     
     // Create
     func addUser(documentID: String, email: String, selfie: String) {
@@ -89,6 +93,87 @@ class FirestoreManager: ObservableObject {
             }
         }
     
+    // MARK: - Socials Feed Listener
+        
+    func fetchSocialPosts() {
+        db.collection("socials")
+            .order(by: "timestamp", descending: true)
+            .addSnapshotListener { querySnapshot, error in
+                if let error = error {
+                    print("Error fetching posts: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = querySnapshot?.documents else { return }
+                
+                DispatchQueue.main.async {
+                    self.posts = documents.compactMap { doc in
+                        do {
+                            return try doc.data(as: SocialsPost.self)
+                        } catch {
+                            print("Error decoding post \(doc.documentID): \(error)")
+                            return nil
+                        }
+                    }
+                }
+            }
+    }
+
+    func uploadPost(email: String, username: String, caption: String, imageUrl: String) {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let uniqueID = "\(email)_\(timestamp)"
+        
+        let postData: [String: Any] = [
+            "id": uniqueID,
+            "userEmail": email,
+            "username": username,
+            "caption": caption,
+            "imageUrl": imageUrl,
+            "likes": 0,
+            "likedBy": [], // Initialize with empty array
+            "comments": 0,
+            "timestamp": FieldValue.serverTimestamp()
+        ]
+        db.collection("socials").document(uniqueID).setData(postData)
+    }
+
+    func toggleLike(post: SocialsPost, userEmail: String, username: String) {
+        let postRef = db.collection("socials").document(post.id)
+        
+        // Check using the email (unique ID)
+        if post.safeLikedBy.contains(userEmail) {
+            // UNLIKE: Both email and the exact username must be removed
+            postRef.updateData([
+                "likedBy": FieldValue.arrayRemove([userEmail]),
+                "likedByNames": FieldValue.arrayRemove([username]),
+                "likes": FieldValue.increment(Int64(-1))
+            ])
+        } else {
+            // LIKE: Add both to the database
+            postRef.updateData([
+                "likedBy": FieldValue.arrayUnion([userEmail]),
+                "likedByNames": FieldValue.arrayUnion([username]),
+                "likes": FieldValue.increment(Int64(1))
+            ])
+        }
+    }
     
+    func fetchUsername(for email: String, completion: @escaping (String) -> Void) {
+        db.collection("users").document(email).getDocument { document, error in
+            if let document = document, document.exists {
+                let data = document.data()
+                // Assuming your user document has a "username" field
+                let username = data?["username"] as? String ?? "User"
+                completion(username)
+            } else {
+                // Fallback to the first part of the email if document isn't found
+                let fallback = email.components(separatedBy: "@").first ?? "User"
+                completion(fallback)
+            }
+        }
+    }
     
+    func stopListening() {
+        listener?.remove()
+    }
 }

@@ -1,3 +1,10 @@
+//
+//  BodyMeasurementView.swift
+//  fitpick2
+//
+//  Created by Amuel Ryco Nidoy on 1/20/26.
+//
+
 import SwiftUI
 import Foundation
 import FirebaseAuth
@@ -27,6 +34,10 @@ struct BodyMeasurementView: View {
     
     @StateObject private var firestoreManager = FirestoreManager()
     @StateObject private var storageManager = StorageManager()
+    
+    // Brand Colors
+    let fitPickGold = Color("fitPickGold")
+    let fitPickBlack = Color("fitPickBlack")
 
     var body: some View {
         NavigationStack {
@@ -128,22 +139,23 @@ struct BodyMeasurementView: View {
                 }
                 
                 VStack(spacing: 12) {
-                    Button(action: { print("Selfie tapped")
-                        //Camera
+                    //Updated Selfie
+                    Button(action: {
+                        print("Selfie tapped")
                         showImagePicker = true
                     }) {
-                        Text("Selfie")
+                        Text(selectedSelfie == nil ? "Take Selfie" : "Retake Selfie")
                             .font(.subheadline)
                             .fontWeight(.bold)
-                            .foregroundColor(.blue)
+                            .foregroundColor(fitPickGold)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color.blue.opacity(0.1))
+                            .background(fitPickGold.opacity(0.1))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
                             .cornerRadius(12)
                     }
-                    //Camera
                     .sheet(isPresented: $showImagePicker) {
-                        ImagePicker(image: $selectedSelfie)
+                        FaceCaptureView(selectedImage: $selectedSelfie)
                     }
                     
                     Button(action: {
@@ -157,7 +169,8 @@ struct BodyMeasurementView: View {
                         
                         //Save in Storage + Firestore
                         if let selfie = selectedSelfie {
-                            storageManager.upload(username: username, selfie: selfie) { downloadURL in
+                            //Update Storage path
+                            storageManager.uploadSelfie(email: userEmail, selfie: selfie) { downloadURL in
                                 if let userEmail = session.email {
                                     print("Current user email: \(session.email ?? "No email found")")
                                     let userRef = db.collection("users").document(userEmail)
