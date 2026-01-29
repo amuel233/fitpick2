@@ -11,6 +11,7 @@ enum ClothingCategory: String, CaseIterable, Identifiable, Codable {
     case top = "Top"
     case bottom = "Bottom"
     case shoes = "Shoes"
+    case accessories = "Accessories"
     
     var id: String { self.rawValue }
     
@@ -20,6 +21,7 @@ enum ClothingCategory: String, CaseIterable, Identifiable, Codable {
         case .top: return "tshirt"
         case .bottom: return "figure.walk" // Represents pants/bottoms
         case .shoes: return "shoe"
+        case .accessories: return "star"
         }
     }
 }
