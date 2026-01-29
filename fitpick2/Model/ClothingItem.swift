@@ -25,8 +25,7 @@ enum ClothingCategory: String, CaseIterable, Identifiable, Codable {
 }
 
 struct ClothingItem: Identifiable, Equatable {
-    // We make 'id' a constant that must be passed in (for Firestore document IDs)
-    let id: UUID
+    let id: String
     
     var image: Image          // The SwiftUI Image wrapper
     var uiImage: UIImage?     // CHANGED: Optional (?) so it can be nil when loading from cloud

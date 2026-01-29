@@ -17,22 +17,39 @@ struct SocialsView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Feed")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+            fitPickBlack.ignoresSafeArea()
+            
+            // Global State: If no posts exist yet, show a big loader
+            if firestoreManager.posts.isEmpty {
+                VStack {
+                    Spacer()
+                    ProgressView()
+                        .tint(fitPickGold)
+                        .scaleEffect(2)
+                    Text("Refreshing your feed...")
+                        .font(.subheadline)
                         .foregroundColor(fitPickGold)
-                        .padding(.horizontal)
-                    
-                    ForEach(firestoreManager.posts) { post in
-                        SocialPostCardView(post: post, goldColor: fitPickGold)
-                    }
+                        .padding(.top, 20)
+                    Spacer()
                 }
-                .padding(.top)
-            }
-            // Pull-to-refresh integration
-            .refreshable {
-                firestoreManager.fetchSocialPosts()
+                .frame(maxWidth: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 20) {
+                        Text("Feed")
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .foregroundColor(fitPickGold)
+                            .padding(.horizontal)
+                        
+                        ForEach(firestoreManager.posts) { post in
+                            SocialPostCardView(post: post, goldColor: fitPickGold)
+                        }
+                    }
+                    .padding(.top)
+                }
+                .refreshable {
+                    firestoreManager.fetchSocialPosts()
+                }
             }
             
             // Floating Upload Button
@@ -45,17 +62,13 @@ struct SocialsView: View {
                     .clipShape(Circle())
                     .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
             }
-            .padding(.trailing, 20)
-            .padding(.bottom, 20)
+            .padding(20)
         }
         .fullScreenCover(isPresented: $isShowingUpload) {
             UploadPostView()
         }
         .onAppear {
             firestoreManager.fetchSocialPosts()
-        }
-        .onDisappear {
-            firestoreManager.stopListening()
         }
     }
 }
