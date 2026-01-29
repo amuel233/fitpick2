@@ -17,14 +17,13 @@ class BodyMeasurementViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
-
+    
     func generateAndSaveAvatar() async {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
-        
         await MainActor.run { isGenerating = true }
         
         do {
-            // 1. Fetch latest measurements from Firestore
+            // 1. Fetch User Data (Measurements + Selfie URL)
             let userDoc = try await db.collection("users").document(userEmail).getDocument()
             let data = userDoc.data() ?? [:]
             
@@ -39,65 +38,87 @@ class BodyMeasurementViewModel: ObservableObject {
             let inseam = data["inseam"] as? Double ?? 80.0
             let shoeSize = data["shoeSize"] as? Double ?? 9.0
             
-            // 2. Setup Generative AI
+            let selfieURLString = data["selfie"] as? String ?? ""
+            
+            // 2. Download the selfie to pass to Gemini
+            guard let selfieURL = URL(string: selfieURLString),
+                  let (imageData, _) = try? await URLSession.shared.data(from: selfieURL),
+                  let selfieUIImage = UIImage(data: imageData) else {
+                print("Error: Could not load user selfie for reference.")
+                await MainActor.run { isGenerating = false }
+                return
+            }
+            
+            // 3. Setup AI with Image Reference
             let generativeModel = FirebaseAI.firebaseAI(backend: .vertexAI(location: "us-central1")).generativeModel(
                 modelName: "gemini-2.5-flash-image"
             )
             
-            // Per your instruction: One face, front-facing, neutral background
+            // PROMPT LOGIC: We tell the AI to use the attached image for the face
             let prompt = """
-        ACT AS A 3D CHARACTER ENGINE. 
-                TASK: Generate a photorealistic 3D human avatar for a virtual fitting room.
-                
-                CONSISTENCY RULES (MANDATORY):
-                1. IDENTITY: Use the EXACT same face and ethnicity for every request. The avatar must look like the same individual every time.
-                2. POSITION: The avatar must be standing perfectly centered.
-                3. ORIENTATION: Always facing directly toward the camera (Front View). Do not rotate the body.
-                4. POSE: Static 'A-pose' (arms slightly out, legs straight).
-                
-                ANATOMICAL MEASUREMENTS (ONLY THESE SHOULD CHANGE):
-                - Gender: \(gender)
-                - Height: \(height)cm
-                - Weight: \(weight)kg
-                - Shoulder Width: \(shoulderWidth)cm
-                - Chest: \(chest)cm
-                - Waist: \(waist)cm
-                - Hips: \(hips)cm
-                - Arm Length: \(armLength)cm
-                - Inseam: \(inseam)cm
-                - US Shoe Size: \(shoeSize)
-        
-        INSTRUCTIONS FOR BODY COMPOSITION:
-        1. Use the Height (\(height)cm) and Weight (\(weight)kg) to accurately represent the body mass index (BMI).
-        2. Adjust the thickness of the arms, legs, and neck to be proportional to a \(weight)kg frame.
-        3. If the weight is high relative to the height, ensure a soft, endomorphic body type. 
-        4. If the weight is low relative to height, ensure a lean, ectomorphic body type.
-        5. The waist (\(waist)cm) and chest (\(chest)cm) measurements must be the primary guide for the torso silhouette.
-        
-        VISUAL STYLE:
-                - Clean, minimalist white studio background.
-                - Wearing tight, form-fitting grey athletic base-layer clothing (this is essential to see the body changes clearly).
-                - 8k resolution, cinematic lighting, realistic skin texture.
-                - No extra accessories or dramatic poses.
-        """
-
             
-            let response = try await generativeModel.generateContent(prompt)
-            guard let imageData = response.inlineDataParts.first?.data,
-                  let uiImage = UIImage(data: imageData) else { return }
+            Body Specifications: \(gender), height \(height)cm, weight \(weight)kg.
+            Pose: Standing front-facing, neutral expression, arms at sides.
+            Style: High-quality realistic render, white studio background. 
+            Ensure the face remains identical to the provided selfie.
             
-            // 3. Upload to Firebase Storage
-            let storageRef = storage.reference().child("avatars/\(userEmail).jpg")
-            _ = try await storageRef.putDataAsync(imageData)
+            
+              ACT AS A 3D CHARACTER ENGINE. 
+                            TASK: Generate a photorealistic 3D human avatar for a virtual fitting room.
+                            
+                            CONSISTENCY RULES (MANDATORY):
+                            1. IDENTITY: Use the EXACT same face and ethnicity for every request. The avatar must look like the same individual every time.
+                            2. If there's a provided selfie, use the attached selfie for the face and head, generate a full-body 3D avatar of this specific person.
+                            3. POSITION: The avatar must be standing perfectly centered.
+                            4. ORIENTATION: Always facing directly toward the camera (Front View). Do not rotate the body.
+                            5. POSE: Static 'A-pose' (arms slightly out, legs straight).
+                            
+                            ANATOMICAL MEASUREMENTS (ONLY THESE SHOULD CHANGE):
+                            - Gender: \(gender)
+                            - Height: \(height)cm
+                            - Weight: \(weight)kg
+                            - Shoulder Width: \(shoulderWidth)cm
+                            - Chest: \(chest)cm
+                            - Waist: \(waist)cm
+                            - Hips: \(hips)cm
+                            - Arm Length: \(armLength)cm
+                            - Inseam: \(inseam)cm
+                            - US Shoe Size: \(shoeSize)
+                    
+                    INSTRUCTIONS FOR BODY COMPOSITION:
+                    1. Use the Height (\(height)cm) and Weight (\(weight)kg) to accurately represent the body mass index (BMI).
+                    2. Adjust the thickness of the arms, legs, and neck to be proportional to a \(weight)kg frame.
+                    3. If the weight is high relative to the height, ensure a soft, endomorphic body type. 
+                    4. If the weight is low relative to height, ensure a lean, ectomorphic body type.
+                    5. The waist (\(waist)cm) and chest (\(chest)cm) measurements must be the primary guide for the torso silhouette.
+                    
+                    VISUAL STYLE:
+                            - Clean, minimalist white studio background.
+                            - Wearing tight, form-fitting grey athletic base-layer clothing (this is essential to see the body changes clearly).
+                            - 8k resolution, cinematic lighting, realistic skin texture.
+                            - No extra accessories or dramatic poses.
+            
+            
+            
+            """
+            
+            // 4. Generate Content (Passing the prompt AND the selfie)
+            let response = try await generativeModel.generateContent(prompt, selfieUIImage)
+            
+            guard let generatedData = response.inlineDataParts.first?.data,
+                  let generatedUIImage = UIImage(data: generatedData) else { return }
+            
+            // 5. Save to Storage & Update Firestore
+            let storageRef = storage.reference().child("avatars/\(userEmail)_avatar.jpg")
+            _ = try await storageRef.putDataAsync(generatedData)
             let downloadURL = try await storageRef.downloadURL()
             
-            // 4. Save URL back to Firestore
             try await db.collection("users").document(userEmail).updateData([
                 "avatarURL": downloadURL.absoluteString
             ])
             
             await MainActor.run {
-                self.generatedImage = uiImage
+                self.generatedImage = generatedUIImage
                 self.isGenerating = false
             }
             
