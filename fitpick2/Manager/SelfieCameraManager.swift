@@ -25,8 +25,7 @@ class SelfieCameraManager: NSObject, ObservableObject {
     func startSession() {
         DispatchQueue.global(qos: .userInitiated).async {
             if self.session.inputs.isEmpty {
-                //Change position to ".front" after testing
-                guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
                       let input = try? AVCaptureDeviceInput(device: device) else { return }
                 
                 self.session.beginConfiguration()
