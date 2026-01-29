@@ -28,7 +28,8 @@ struct ClosetView: View {
             List {
                 // SECTION 1: Header
                 Section {
-                    ClosetHeaderView(portraitImage: userPortrait != nil ? Image(uiImage: userPortrait!) : nil)
+                    // Remove the portraitImage argument here
+                    ClosetHeaderView()
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
