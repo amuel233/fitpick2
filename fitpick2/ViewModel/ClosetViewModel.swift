@@ -86,7 +86,7 @@ class ClosetViewModel: ObservableObject {
             // 2. AI Analysis
             let prompt = """
             You are a personal stylist AI. Analyze this clothing image for a \(userGender).
-            1. Main Category: Must be exactly one of "Top", "Bottom", or "Shoes".
+            1. Main Category: Must be exactly one of "Top", "Bottom", "Shoes", or "Accessories".
             2. Sub-Category: Identify the specific item (e.g. "Bomber Jacket", "Pleated Skirt", "Loafers").
             Return valid JSON only: {"category": "...", "subcategory": "..."}
             """
