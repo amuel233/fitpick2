@@ -22,6 +22,9 @@ struct AutoMeasureView: View {
     
     @State private var isLocked = false
     
+    @Environment(\.dismiss) var dismiss // Add this line
+
+    
     // ADD THIS: A closure to return the final values
     var onCapture: ((Double, Double, Double, Double, Double, Double, Double) -> Void)?
     
@@ -44,6 +47,23 @@ struct AutoMeasureView: View {
                             }
                     }
                 }.ignoresSafeArea()
+                
+                VStack {
+                                        HStack {
+                                            Button(action: {
+                                                // This triggers the dismissal of the fullScreenCover
+                                                // If you are using 'dismiss' environment variable:
+                                                dismiss()
+                                            }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .font(.system(size: 30))
+                                                    .foregroundColor(.white.opacity(0.8))
+                                                    .padding()
+                                            }
+                                            Spacer()
+                                        }
+                                        Spacer()
+                                    }
                 
                 // HUD Overlay
                 VStack {
