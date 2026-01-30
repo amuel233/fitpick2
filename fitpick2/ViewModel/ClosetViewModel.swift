@@ -154,18 +154,18 @@ class ClosetViewModel: ObservableObject {
                         TASK: Edit Image 1 only. This is NOT a photorealistic generation task.
 
                         STYLE CONSTRAINT:
-                        - The output must remain a 3D-rendered avatar.
+                        - The output must remain to be the avatar with the selected clothes.
                         - Do NOT generate a photorealistic human.
                         - Preserve the same 3D art style, shading, materials, and rendering quality as Image 1.
 
                         SOURCE IMAGES:
                         - Image 1 (Avatar): This is the base 3D avatar. The head, face, hair, skin tone, body shape, pose, proportions, and 3D rendering style must remain unchanged.
-                        - Images 2+ (Clothing): These are garment design references only. Ignore any people shown.
+                        - Images 3+ (Clothing): These are garment design references only. Ignore any people shown.
 
                         CRITICAL IDENTITY & STYLE LOCK:
                         - Do NOT regenerate, replace, or stylize the head or face.
                         - Do NOT change the avatar into a real person or realistic photograph.
-                        - The avatar must clearly remain the SAME 3D character as Image 1.
+                        - The avatar must clearly remain the same as Image 1.
 
                         CLOTHING APPLICATION:
                         - Extract ONLY garment design, texture, cut, and color from clothing images.
@@ -175,14 +175,14 @@ class ClosetViewModel: ObservableObject {
                         - If a clothing category is not selected, leave it unchanged.
 
                         COMPOSITION:
-                        - Full-body framing with head and shoes visible.
-                        - Avatar centered in a neutral A-pose (arms slightly out, legs straight).
+                        - Full-body framing with head and feet visible.
+                        - Avatar centered in a neutral A-pose (arms slightly out, legs straight) and facing forward.
 
                         OUTFIT REQUIREMENTS:
                         The avatar must wear: \(itemDescriptions)
 
                         OUTPUT(STRICT):
-                        A single uncropped full-body 3D avatar image matching the exact style of Image 1, wearing the selected items.
+                        A single uncropped full-body of Image 1, wearing the selected items.
                         """
             
             var parts: [any Part] = []
