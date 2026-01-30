@@ -1,10 +1,3 @@
-//
-//  BodyMeasurementViewModel.swift
-//  fitpick2
-//
-//  Created by Amuel Ryco Nidoy on 1/23/26.
-//
-
 import SwiftUI
 import FirebaseStorage
 import FirebaseFirestore
@@ -23,7 +16,7 @@ class BodyMeasurementViewModel: ObservableObject {
         await MainActor.run { isGenerating = true }
         
         do {
-            // 1. Fetch User Data (Measurements + Selfie URL)
+            // 1. Fetch User Data
             let userDoc = try await db.collection("users").document(userEmail).getDocument()
             let data = userDoc.data() ?? [:]
             
@@ -38,77 +31,87 @@ class BodyMeasurementViewModel: ObservableObject {
             let inseam = data["inseam"] as? Double ?? 80.0
             let shoeSize = data["shoeSize"] as? Double ?? 9.0
             
+            // Note: Changed from "selfieURL" to "selfie" to match your code
             let selfieURLString = data["selfie"] as? String ?? ""
             
-            // 2. Download the selfie to pass to Gemini
-            guard let selfieURL = URL(string: selfieURLString),
-                  let (imageData, _) = try? await URLSession.shared.data(from: selfieURL),
-                  let selfieUIImage = UIImage(data: imageData) else {
-                print("Error: Could not load user selfie for reference.")
-                await MainActor.run { isGenerating = false }
-                return
+            // 2. OPTIONAL: Download the selfie
+            var selfieUIImage: UIImage? = nil
+            if !selfieURLString.isEmpty, let selfieURL = URL(string: selfieURLString) {
+                // We use an 'if let' instead of 'guard' so the code continues even if download fails
+                if let (imageData, _) = try? await URLSession.shared.data(from: selfieURL) {
+                    selfieUIImage = UIImage(data: imageData)
+                }
             }
             
-            // 3. Setup AI with Image Reference
+            // 3. Setup AI Model
             let generativeModel = FirebaseAI.firebaseAI(backend: .vertexAI(location: "us-central1")).generativeModel(
                 modelName: "gemini-2.5-flash-image"
             )
             
-            // PROMPT LOGIC: We tell the AI to use the attached image for the face
+            // 4. DYNAMIC PROMPT LOGIC
+            // If selfie exists, we tell it to use it. If not, we tell it to generate a standard face.
+            let identityInstruction = (selfieUIImage != nil)
+                ? "IDENTITY: Use the attached selfie for the face and head. The avatar must be an exact 3D likeness of this person."
+                : "IDENTITY: Generate a realistic, neutral face for a \(gender) consistent with the body type."
+
             let prompt = """
+            \(identityInstruction)
             
             Body Specifications: \(gender), height \(height)cm, weight \(weight)kg.
-            Pose: Standing front-facing, neutral expression, arms at sides.
-            Style: High-quality realistic render, white studio background. 
-            Ensure the face remains identical to the provided selfie.
-            
-            
-              ACT AS A 3D CHARACTER ENGINE. 
-                            TASK: Generate a photorealistic 3D human avatar for a virtual fitting room.
-                            
-                            CONSISTENCY RULES (MANDATORY):
-                            1. IDENTITY: Use the EXACT same face and ethnicity for every request. The avatar must look like the same individual every time.
-                            2. If there's a provided selfie, use the attached selfie for the face and head, generate a full-body 3D avatar of this specific person.
-                            3. POSITION: The avatar must be standing perfectly centered.
-                            4. ORIENTATION: Always facing directly toward the camera (Front View). Do not rotate the body.
-                            5. POSE: Static 'A-pose' (arms slightly out, legs straight).
-                            
-                            ANATOMICAL MEASUREMENTS (ONLY THESE SHOULD CHANGE):
-                            - Gender: \(gender)
-                            - Height: \(height)cm
-                            - Weight: \(weight)kg
-                            - Shoulder Width: \(shoulderWidth)cm
-                            - Chest: \(chest)cm
-                            - Waist: \(waist)cm
-                            - Hips: \(hips)cm
-                            - Arm Length: \(armLength)cm
-                            - Inseam: \(inseam)cm
-                            - US Shoe Size: \(shoeSize)
-                    
-                    INSTRUCTIONS FOR BODY COMPOSITION:
-                    1. Use the Height (\(height)cm) and Weight (\(weight)kg) to accurately represent the body mass index (BMI).
-                    2. Adjust the thickness of the arms, legs, and neck to be proportional to a \(weight)kg frame.
-                    3. If the weight is high relative to the height, ensure a soft, endomorphic body type. 
-                    4. If the weight is low relative to height, ensure a lean, ectomorphic body type.
-                    5. The waist (\(waist)cm) and chest (\(chest)cm) measurements must be the primary guide for the torso silhouette.
-                    
-                    VISUAL STYLE:
-                            - Clean, minimalist white studio background.
-                            - Wearing tight, form-fitting grey athletic base-layer clothing (this is essential to see the body changes clearly).
-                            - 8k resolution, cinematic lighting, realistic skin texture.
-                            - No extra accessories or dramatic poses.
-            
-            
-            
+                      Pose: Standing front-facing, neutral expression, arms at sides.
+                      Style: High-quality realistic render, white studio background. 
+                      Ensure the face remains identical to the provided selfie.
+                      
+                      
+                        ACT AS A 3D CHARACTER ENGINE. 
+                                      TASK: Generate a photorealistic 3D human avatar for a virtual fitting room.
+                                      
+                                      CONSISTENCY RULES (MANDATORY):
+                                      1. IDENTITY: Use the EXACT same face and ethnicity for every request. The avatar must look like the same individual every time.
+                                      2. If there's a provided selfie, use the attached selfie for the face and head, generate a full-body 3D avatar of this specific person.
+                                      3. POSITION: The avatar must be standing perfectly centered.
+                                      4. ORIENTATION: Always facing directly toward the camera (Front View). Do not rotate the body.
+                                      5. POSE: Static 'A-pose' (arms slightly out, legs straight).
+                                      
+                                      ANATOMICAL MEASUREMENTS (ONLY THESE SHOULD CHANGE):
+                                      - Gender: \(gender)
+                                      - Height: \(height)cm
+                                      - Weight: \(weight)kg
+                                      - Shoulder Width: \(shoulderWidth)cm
+                                      - Chest: \(chest)cm
+                                      - Waist: \(waist)cm
+                                      - Hips: \(hips)cm
+                                      - Arm Length: \(armLength)cm
+                                      - Inseam: \(inseam)cm
+                                      - US Shoe Size: \(shoeSize)
+                              
+                              INSTRUCTIONS FOR BODY COMPOSITION:
+                              1. Use the Height (\(height)cm) and Weight (\(weight)kg) to accurately represent the body mass index (BMI).
+                              2. Adjust the thickness of the arms, legs, and neck to be proportional to a \(weight)kg frame.
+                              3. If the weight is high relative to the height, ensure a soft, endomorphic body type. 
+                              4. If the weight is low relative to height, ensure a lean, ectomorphic body type.
+                              5. The waist (\(waist)cm) and chest (\(chest)cm) measurements must be the primary guide for the torso silhouette.
+                              
+                              VISUAL STYLE:
+                                      - Clean, minimalist white studio background.
+                                      - Wearing tight, form-fitting grey athletic base-layer clothing (this is essential to see the body changes clearly).
+                                      - 8k resolution, cinematic lighting, realistic skin texture.
+                                      - No extra accessories or dramatic poses.
+
             """
             
-            // 4. Generate Content (Passing the prompt AND the selfie)
-            let response = try await generativeModel.generateContent(prompt, selfieUIImage)
+            // 5. GENERATE CONTENT (Conditional on whether selfie exists)
+            let response: GenerateContentResponse
+            if let selfie = selfieUIImage {
+                response = try await generativeModel.generateContent(prompt, selfie)
+            } else {
+                response = try await generativeModel.generateContent(prompt)
+            }
             
             guard let generatedData = response.inlineDataParts.first?.data,
                   let generatedUIImage = UIImage(data: generatedData) else { return }
             
-            // 5. Save to Storage & Update Firestore
+            // 6. Save to Storage & Update Firestore
             let storageRef = storage.reference().child("avatars/\(userEmail)_avatar.jpg")
             _ = try await storageRef.putDataAsync(generatedData)
             let downloadURL = try await storageRef.downloadURL()
