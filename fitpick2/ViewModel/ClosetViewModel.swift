@@ -20,6 +20,12 @@ struct AICategorization: Codable {
 class ClosetViewModel: ObservableObject {
     @Published var clothingItems: [ClothingItem] = []
     @Published var isUploading = false
+    @Published var isGeneratingTryOn = false
+    @Published var generatedTryOnImage: UIImage? = nil
+    
+    // Stores text messages if the AI refuses to generate an image
+    @Published var tryOnMessage: String? = nil
+    
     @Published var userGender: String = "Male"
     
     private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
@@ -27,8 +33,8 @@ class ClosetViewModel: ObservableObject {
     private let storage = Storage.storage()
     private var listener: ListenerRegistration?
     
-    // Initialize Gemini 2.5 Flash
     private lazy var visionModel = ai.generativeModel(modelName: "gemini-2.5-flash")
+    private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
 
     init() {
         startFirestoreListener()
@@ -38,31 +44,21 @@ class ClosetViewModel: ObservableObject {
     func startFirestoreListener() {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         
-        // This query requires the index link from your previous error
         listener = db.collection("clothes")
             .whereField("ownerEmail", isEqualTo: userEmail)
             .order(by: "createdat", descending: true)
             .addSnapshotListener { [weak self] querySnapshot, error in
-                guard let documents = querySnapshot?.documents else {
-                    print("Error fetching documents: \(error?.localizedDescription ?? "Unknown error")")
-                    return
-                }
+                guard let documents = querySnapshot?.documents else { return }
                 
                 self?.clothingItems = documents.compactMap { doc -> ClothingItem? in
                     let data = doc.data()
-                    
-                    let urlString = data["imageURL"] as? String ?? ""
-                    let categoryString = data["category"] as? String ?? "Top"
-                    let subCategory = data["subcategory"] as? String ?? "Other"
-                    let category = ClothingCategory(rawValue: categoryString) ?? .top
-                    
                     return ClothingItem(
                         id: doc.documentID,
                         image: Image(systemName: "photo"),
                         uiImage: nil,
-                        category: category,
-                        subCategory: subCategory,
-                        remoteURL: urlString
+                        category: ClothingCategory(rawValue: data["category"] as? String ?? "") ?? .top,
+                        subCategory: data["subcategory"] as? String ?? "Other",
+                        remoteURL: data["imageURL"] as? String ?? ""
                     )
                 }
             }
@@ -79,11 +75,9 @@ class ClosetViewModel: ObservableObject {
         let storageRef = storage.reference().child("closet/\(fileName)")
 
         do {
-            // 1. Upload Image to Storage
             _ = try await storageRef.putDataAsync(imageData)
             let downloadURL = try await storageRef.downloadURL()
 
-            // 2. AI Analysis
             let prompt = """
             You are a personal stylist AI. Analyze this clothing image for a \(userGender).
             1. Main Category: Must be exactly one of "Top", "Bottom", "Shoes", or "Accessories".
@@ -93,14 +87,13 @@ class ClosetViewModel: ObservableObject {
             
             let response = try await visionModel.generateContent(prompt, uiImage)
             
-            // Extract and clean JSON string from AI response
             if let text = response.text?.replacingOccurrences(of: "```json", with: "").replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines),
                let data = text.data(using: .utf8) {
                 
                 let result = try JSONDecoder().decode(AICategorization.self, from: data)
+                let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
                 
-                // 3. Save to Firestore
-                try await db.collection("clothes").addDocument(data: [
+                try await db.collection("clothes").document(customDocID).setData([
                     "imageURL": downloadURL.absoluteString,
                     "category": result.category,
                     "subcategory": result.subcategory,
@@ -111,8 +104,153 @@ class ClosetViewModel: ObservableObject {
         } catch {
             print("AI/Upload Error: \(error.localizedDescription)")
         }
-        
         await MainActor.run { isUploading = false }
+    }
+    
+    // MARK: - Virtual Try-On Generation (UPDATED PROMPT)
+    func generateVirtualTryOn(selectedItemIDs: Set<String>) async {
+        print("DEBUG: Starting Try-On Process...")
+        
+        await MainActor.run {
+            isGeneratingTryOn = true
+            generatedTryOnImage = nil
+            tryOnMessage = nil
+        }
+        
+        guard let userEmail = Auth.auth().currentUser?.email else { return }
+        
+        do {
+            // 1. Fetch User Avatar
+            let userDoc = try await db.collection("users").document(userEmail).getDocument()
+            guard let avatarURLString = userDoc.data()?["avatarURL"] as? String,
+                  let avatarURL = URL(string: avatarURLString) else {
+                print("DEBUG: No avatar URL found.")
+                await MainActor.run { isGeneratingTryOn = false }
+                return
+            }
+            
+            let (avatarData, _) = try await URLSession.shared.data(from: avatarURL)
+            guard let avatarImage = UIImage(data: avatarData) else { return }
+
+            // 2. Fetch Selected Clothes
+            let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
+            
+            // Generate a descriptive list of items for the prompt (e.g., "T-Shirt, Jeans")
+            let itemDescriptions = selectedClothes.map { $0.subCategory }.joined(separator: ", ")
+            print("DEBUG: Generating look for items: \(itemDescriptions)")
+            
+            var clothingImages: [UIImage] = []
+            for item in selectedClothes {
+                if let url = URL(string: item.remoteURL) {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    if let img = UIImage(data: data) {
+                        clothingImages.append(img)
+                    }
+                }
+            }
+
+            // 3. Construct Request with STRICTER Prompt
+            let promptText = """
+                        TASK: Edit Image 1 only. This is NOT a photorealistic generation task.
+
+                        STYLE CONSTRAINT:
+                        - The output must remain to be the avatar with the selected clothes.
+                        - Do NOT generate a photorealistic human.
+                        - Preserve the same 3D art style, shading, materials, and rendering quality as Image 1.
+
+                        SOURCE IMAGES:
+                        - Image 1 (Avatar): This is the base 3D avatar. The head, face, hair, skin tone, body shape, pose, proportions, and 3D rendering style must remain unchanged.
+                        - Images 3+ (Clothing): These are garment design references only. Ignore any people shown.
+
+                        CRITICAL IDENTITY & STYLE LOCK:
+                        - Do NOT regenerate, replace, or stylize the head or face.
+                        - Do NOT change the avatar into a real person or realistic photograph.
+                        - The avatar must clearly remain the same as Image 1.
+
+                        CLOTHING APPLICATION:
+                        - Extract ONLY garment design, texture, cut, and color from clothing images.
+                        - Apply garments onto the body of Image 1.
+                        - Do NOT copy anatomy, skin, or pose from clothing images.
+                        - ONLY replace clothing items explicitly selected.
+                        - If a clothing category is not selected, leave it unchanged.
+
+                        COMPOSITION:
+                        - Full-body framing with head and feet visible.
+                        - Avatar centered in a neutral A-pose (arms slightly out, legs straight) and facing forward.
+
+                        OUTFIT REQUIREMENTS:
+                        The avatar must wear: \(itemDescriptions)
+
+                        OUTPUT(STRICT):
+                        A single uncropped full-body of Image 1, wearing the selected items.
+                        """
+            
+            var parts: [any Part] = []
+            parts.append(TextPart(promptText))
+            
+            if let avatarJPEG = avatarImage.jpegData(compressionQuality: 0.8) {
+                parts.append(InlineDataPart(data: avatarJPEG, mimeType: "image/jpeg"))
+            }
+            
+            for img in clothingImages {
+                if let clothingJPEG = img.jpegData(compressionQuality: 0.8) {
+                    parts.append(InlineDataPart(data: clothingJPEG, mimeType: "image/jpeg"))
+                }
+            }
+            
+            // 4. API Call
+            let content = ModelContent(role: "user", parts: parts)
+            let response = try await imageGenModel.generateContent([content])
+
+            // 5. Handle Response
+            if let firstCandidate = response.candidates.first,
+               let firstPart = firstCandidate.content.parts.first {
+                
+                if let inlineData = firstPart as? InlineDataPart,
+                   let generatedImage = UIImage(data: inlineData.data) {
+                    
+                    print("DEBUG: Image generated successfully.")
+                    await MainActor.run {
+                        self.generatedTryOnImage = generatedImage
+                        self.isGeneratingTryOn = false
+                    }
+                    try await saveGeneratedImageToFirebase(image: generatedImage, itemIDs: Array(selectedItemIDs), userEmail: userEmail)
+                    
+                } else if let textPart = firstPart as? TextPart {
+                    print("DEBUG: Model refused image generation. Reason: \(textPart.text)")
+                    await MainActor.run {
+                        self.tryOnMessage = "Stylist Note: \(textPart.text)"
+                        self.isGeneratingTryOn = false
+                    }
+                }
+            } else {
+                print("DEBUG: Empty response.")
+                await MainActor.run { isGeneratingTryOn = false }
+            }
+            
+        } catch {
+            print("DEBUG: Error - \(error.localizedDescription)")
+            await MainActor.run { isGeneratingTryOn = false }
+        }
+    }
+    
+    private func saveGeneratedImageToFirebase(image: UIImage, itemIDs: [String], userEmail: String) async throws {
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+        
+        let fileName = "generated_\(UUID().uuidString).jpg"
+        let storageRef = storage.reference().child("generated_looks/\(fileName)")
+        
+        _ = try await storageRef.putDataAsync(imageData)
+        let downloadURL = try await storageRef.downloadURL()
+        
+        let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
+        
+        try await db.collection("generated_looks").document(customDocID).setData([
+            "imageURL": downloadURL.absoluteString,
+            "ownerEmail": userEmail,
+            "itemsUsed": itemIDs,
+            "createdat": FieldValue.serverTimestamp()
+        ])
     }
     
     func fetchUserGender() {
@@ -126,9 +264,8 @@ class ClosetViewModel: ObservableObject {
     
     func deleteItem(_ item: ClothingItem) {
         db.collection("clothes").document(item.id).delete()
-    }
-
-    deinit {
-        listener?.remove()
+        if !item.remoteURL.isEmpty {
+            storage.reference(forURL: item.remoteURL).delete { _ in }
+        }
     }
 }
