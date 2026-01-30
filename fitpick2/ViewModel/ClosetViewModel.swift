@@ -36,7 +36,7 @@ class ClosetViewModel: ObservableObject {
     
     private lazy var visionModel = ai.generativeModel(modelName: "gemini-2.5-flash")
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
-
+    
     init() {
         startFirestoreListener()
         // Listen for calendar updates and auto-generate try-on suggestions
@@ -72,7 +72,7 @@ class ClosetViewModel: ObservableObject {
                 }
             }
     }
-
+    
     // MARK: - Upload & AI Workflow
     func uploadAndCategorize(uiImage: UIImage) async {
         await MainActor.run { isUploading = true }
@@ -82,11 +82,11 @@ class ClosetViewModel: ObservableObject {
         
         let fileName = "\(UUID().uuidString).jpg"
         let storageRef = storage.reference().child("closet/\(fileName)")
-
+        
         do {
             _ = try await storageRef.putDataAsync(imageData)
             let downloadURL = try await storageRef.downloadURL()
-
+            
             let prompt = """
             You are a personal stylist AI. Analyze this clothing image for a \(userGender).
             1. Main Category: Must be exactly one of "Top", "Bottom", "Shoes", or "Accessories".
@@ -140,7 +140,7 @@ class ClosetViewModel: ObservableObject {
             
             let (avatarData, _) = try await URLSession.shared.data(from: avatarURL)
             guard let avatarImage = UIImage(data: avatarData) else { return }
-
+            
             // 2. Fetch Selected Clothes
             let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
             
@@ -157,39 +157,39 @@ class ClosetViewModel: ObservableObject {
                     }
                 }
             }
-
+            
             // 3. Construct Request with STRICTER Prompt
             let promptText = """
                         TASK: Edit Image 1 only. This is NOT a photorealistic generation task.
-
+                        
                         STYLE CONSTRAINT:
                         - The output must remain to be the avatar with the selected clothes.
                         - Do NOT generate a photorealistic human.
                         - Preserve the same 3D art style, shading, materials, and rendering quality as Image 1.
-
+                        
                         SOURCE IMAGES:
                         - Image 1 (Avatar): This is the base 3D avatar. The head, face, hair, skin tone, body shape, pose, proportions, and 3D rendering style must remain unchanged.
                         - Images 3+ (Clothing): These are garment design references only. Ignore any people shown.
-
+                        
                         CRITICAL IDENTITY & STYLE LOCK:
                         - Do NOT regenerate, replace, or stylize the head or face.
                         - Do NOT change the avatar into a real person or realistic photograph.
                         - The avatar must clearly remain the same as Image 1.
-
+                        
                         CLOTHING APPLICATION:
                         - Extract ONLY garment design, texture, cut, and color from clothing images.
                         - Apply garments onto the body of Image 1.
                         - Do NOT copy anatomy, skin, or pose from clothing images.
                         - ONLY replace clothing items explicitly selected.
                         - If a clothing category is not selected, leave it unchanged.
-
+                        
                         COMPOSITION:
                         - Full-body framing with head and feet visible.
                         - Avatar centered in a neutral A-pose (arms slightly out, legs straight) and facing forward.
-
+                        
                         OUTFIT REQUIREMENTS:
                         The avatar must wear: \(itemDescriptions)
-
+                        
                         OUTPUT(STRICT):
                         A single uncropped full-body of Image 1, wearing the selected items.
                         """
@@ -210,7 +210,7 @@ class ClosetViewModel: ObservableObject {
             // 4. API Call
             let content = ModelContent(role: "user", parts: parts)
             let response = try await imageGenModel.generateContent([content])
-
+            
             // 5. Handle Response
             if let firstCandidate = response.candidates.first,
                let firstPart = firstCandidate.content.parts.first {
@@ -271,10 +271,6 @@ class ClosetViewModel: ObservableObject {
         }
     }
     
-    func deleteItem(_ item: ClothingItem) {
-        db.collection("clothes").document(item.id).delete()
-    }
-
     /// Suggest clothing items for a given event string using stored AI-generated `subCategory` and `category` metadata.
     /// Returns a prioritized list of suggestions (may be empty).
     func suggestItems(for event: String?) -> [ClothingItem] {
@@ -283,7 +279,7 @@ class ClosetViewModel: ObservableObject {
             // If no event context, return a few recent items
             return Array(clothingItems.prefix(3))
         }
-
+        
         // Keyword mapping to categories/subcategories (simple heuristic)
         let mappings: [String: [String]] = [
             "formal": ["formal", "blazer", "suit", "dress", "heels", "loafers"],
@@ -292,19 +288,19 @@ class ClosetViewModel: ObservableObject {
             "beach": ["swim", "bikini", "flip", "sandals"],
             "outdoor": ["jacket", "coat", "windbreaker", "boots"]
         ]
-
+        
         // collect candidate items with score
         var scored: [(item: ClothingItem, score: Int)] = []
-
+        
         for item in clothingItems {
             var score = 0
             let sub = item.subCategory.lowercased()
             let cat = item.category.rawValue.lowercased()
-
+            
             // direct substring matches boost score
             if txt.contains(sub) || sub.contains(txt) { score += 4 }
             if txt.contains(cat) || cat.contains(txt) { score += 3 }
-
+            
             // mapping-based matches
             for (_, keys) in mappings {
                 for k in keys {
@@ -313,28 +309,43 @@ class ClosetViewModel: ObservableObject {
                     }
                 }
             }
-
+            
             if score > 0 {
                 scored.append((item, score))
             }
         }
-
+        
         // If we found scored items, sort by score and return top 5
         if !scored.isEmpty {
             let sorted = scored.sorted { $0.score > $1.score }.map { $0.item }
             return Array(sorted.prefix(5))
         }
-
+        
         // Fallback: return a few recent items
         return Array(clothingItems.prefix(3))
     }
-
-    deinit {
-        listener?.remove()
-        if let obs = calendarObserver {
-            NotificationCenter.default.removeObserver(obs)
-        if !item.remoteURL.isEmpty {
-            storage.reference(forURL: item.remoteURL).delete { _ in }
+    func deleteItem(_ item: ClothingItem) {
+            // 1. Delete from Firestore
+            db.collection("clothes").document(item.id).delete()
+            
+            // 2. Delete from Storage (Moved back here)
+            if !item.remoteURL.isEmpty {
+                storage.reference(forURL: item.remoteURL).delete { error in
+                    if let error = error {
+                        print("Error deleting storage image: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        
+        /// Suggest clothing items for a given event string...
+        // ... (suggestItems function remains the same) ...
+        
+        deinit {
+            // Clean up listeners only
+            listener?.remove()
+            if let obs = calendarObserver {
+                NotificationCenter.default.removeObserver(obs)
+            }
         }
     }
-}
