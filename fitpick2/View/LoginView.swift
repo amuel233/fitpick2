@@ -120,6 +120,12 @@ struct LoginView: View {
                 Spacer()
             }
         }
+        // Centralized Error Alert
+        .alert("Login Failed", isPresented: $auth.showErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(auth.errorMessage ?? "An unknown error occurred.")
+        }
         .onAppear {
             if auth.hasLoggedInBefore {
                 auth.loginWithBiometrics()

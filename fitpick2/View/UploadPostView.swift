@@ -19,7 +19,7 @@ struct UploadPostView: View {
     @Environment(\.dismiss) var dismiss
     
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
+    let fitPickBlack = Color(red: 26/255, green: 26/255, blue: 27/255)
 
     var body: some View {
         NavigationStack {
@@ -29,31 +29,20 @@ struct UploadPostView: View {
                 VStack(spacing: 25) {
                     PhotosPicker(selection: $selectedItem, matching: .images) {
                         if let image = postImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 500)
-                                .frame(maxWidth: .infinity)
-                                .cornerRadius(15)
-                                .clipped()
+                            Image(uiImage: image).resizable().scaledToFill()
+                                .frame(height: 500).frame(maxWidth: .infinity)
+                                .cornerRadius(15).clipped()
                                 .overlay(RoundedRectangle(cornerRadius: 15).stroke(fitPickGold, lineWidth: 1))
                         } else {
-                            RoundedRectangle(cornerRadius: 15)
-                                .fill(Color.white.opacity(0.1))
+                            RoundedRectangle(cornerRadius: 15).fill(Color.white.opacity(0.1))
                                 .frame(height: 500)
-                                .overlay(
-                                    VStack {
-                                        Image(systemName: "photo.on.rectangle.angled")
-                                            .font(.largeTitle)
-                                        Text("Upload your photo")
-                                            .font(.callout)
-                                    }
-                                    .foregroundColor(fitPickGold)
-                                )
-                                .border(fitPickGold)
+                                .overlay(VStack {
+                                    Image(systemName: "photo.on.rectangle.angled").font(.largeTitle)
+                                    Text("Upload your photo").font(.callout)
+                                }.foregroundColor(fitPickGold))
                         }
                     }
-                    .onChange(of: selectedItem) { oldValue, newValue in
+                    .onChange(of: selectedItem) { _, newValue in
                         Task {
                             if let data = try? await newValue?.loadTransferable(type: Data.self) {
                                 postImage = UIImage(data: data)
@@ -62,34 +51,23 @@ struct UploadPostView: View {
                     }
 
                     TextField("Say something about your fit...", text: $caption)
-                        .padding()
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(10)
-                        .foregroundColor(.white)
-                        .padding(.horizontal)
+                        .padding().background(Color.white.opacity(0.1)).cornerRadius(10)
+                        .foregroundColor(.white).padding(.horizontal)
 
                     if isUploading {
                         ProgressView().tint(fitPickGold)
                     } else {
                         Button(action: uploadPost) {
-                            Text("Share OOTD")
-                                .font(.headline)
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(fitPickGold)
-                                .cornerRadius(10)
+                            Text("Share OOTD").font(.headline).foregroundColor(.black)
+                                .frame(maxWidth: .infinity).padding().background(fitPickGold).cornerRadius(10)
                         }
-                        .padding(.horizontal)
-                        .disabled(postImage == nil || caption.isEmpty)
+                        .padding(.horizontal).disabled(postImage == nil || caption.isEmpty)
                     }
-                    
                     Spacer()
                 }
                 .padding(.top)
             }
             .navigationTitle("New Post")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.foregroundColor(fitPickGold)
@@ -99,26 +77,22 @@ struct UploadPostView: View {
     }
 
     func uploadPost() {
-        // Pull both email and the dynamic username from UserSession
         guard let image = postImage, let email = session.email else { return }
-        let currentUsername = session.username
-        
         isUploading = true
         let storageManager = StorageManager()
         
         storageManager.uploadSocial(email: email, ootd: image) { url in
             let db = Firestore.firestore()
-            let timestamp = Int(Date().timeIntervalSince1970)
-            let uniqueID = "\(email)_\(timestamp)"
+            let uniqueID = "\(email)_\(Int(Date().timeIntervalSince1970))"
             
             let data: [String: Any] = [
                 "id": uniqueID,
                 "userEmail": email,
-                "username": currentUsername, // Uses real display name
+                "username": session.username,
                 "caption": caption,
                 "imageUrl": url,
                 "likes": 0,
-                "likedBy": [],      // Initialize arrays to prevent nil errors
+                "likedBy": [],
                 "likedByNames": [],
                 "timestamp": FieldValue.serverTimestamp()
             ]
