@@ -3,20 +3,51 @@ import FirebaseAuth
 import FirebaseFirestore
 
 struct ClosetHeaderView: View {
+    // ViewModel for Avatar Generation (if needed)
     @StateObject private var bodyVM = BodyMeasurementViewModel()
     @State private var avatarURL: String? = nil
+    
+    // Bindings from Parent View
+    @Binding var tryOnImage: UIImage?
+    @Binding var tryOnMessage: String?
+    
     private let db = Firestore.firestore()
     
     var body: some View {
         VStack(spacing: 20) {
             ZStack(alignment: .bottomTrailing) {
-                Group {
-                    if let urlString = avatarURL, let url = URL(string: urlString) {
+                // IMAGE HOLDER
+                ZStack {
+                    // 1. Background Fill (prevents empty space looking weird)
+                    Color.secondary.opacity(0.05)
+                    
+                    // 2. Image Logic
+                    if let tryOn = tryOnImage {
+                        // A. Show Generated Try-On Image (Full View)
+                        Image(uiImage: tryOn)
+                            .resizable()
+                            .scaledToFit() // Changed from .fill to .fit
+                            .padding(4)    // Add slight padding so it doesn't touch edges
+                    } else if let message = tryOnMessage {
+                        // B. Show Error Message
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.largeTitle)
+                                .foregroundColor(.orange)
+                            Text(message)
+                                .font(.caption)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                        }
+                    } else if let urlString = avatarURL, let url = URL(string: urlString) {
+                        // C. Show Avatar (Full View)
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .success(let image):
                                 image.resizable()
-                                    .aspectRatio(contentMode: .fill)
+                                    .scaledToFill() // Changed from .fill to .fit
+                                    .padding(4)
                             case .failure:
                                 defaultPlaceholder
                             case .empty:
@@ -26,11 +57,11 @@ struct ClosetHeaderView: View {
                             }
                         }
                     } else {
+                        // D. Placeholder
                         defaultPlaceholder
                     }
                 }
-                .frame(width: 360, height: 350)
-                .background(Color.secondary.opacity(0.05))
+                .frame(width: 360, height: 450) // Increased height slightly for full body
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -38,39 +69,64 @@ struct ClosetHeaderView: View {
                 )
                 .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 10)
                 
-                // 2. AI GENERATE BUTTON (Floating)
-                Button(action: {
-                    Task {
-                        await bodyVM.generateAndSaveAvatar()
-                    }
-                }) {
-                    Circle()
-                        .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            Group {
-                                if bodyVM.isGenerating {
-                                    ProgressView().tint(.white)
-                                } else {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                }
+                // FLOATING BUTTONS
+                VStack(spacing: 12) {
+                    // Close/Clear Try-On Button
+                    if tryOnImage != nil || tryOnMessage != nil {
+                        Button(action: {
+                            withAnimation {
+                                tryOnImage = nil
+                                tryOnMessage = nil
                             }
-                        )
-                        .shadow(radius: 4)
+                        }) {
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundColor(.primary)
+                                )
+                                .shadow(radius: 4)
+                        }
+                    }
+                    
+                    // Generate Avatar Button (Only if not trying on)
+                    if tryOnImage == nil && tryOnMessage == nil {
+                        Button(action: {
+                            Task {
+                                await bodyVM.generateAndSaveAvatar()
+                            }
+                        }) {
+                            Circle()
+                                .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Group {
+                                        if bodyVM.isGenerating {
+                                            ProgressView().tint(.white)
+                                        } else {
+                                            Image(systemName: "sparkles")
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                )
+                                .shadow(radius: 4)
+                        }
+                        .disabled(bodyVM.isGenerating)
+                    }
                 }
-                .disabled(bodyVM.isGenerating)
-                .offset(x: 10, y: 10) // Let it hang slightly off the edge
+                .offset(x: 10, y: 10)
             }
             .padding(.top, 10)
             
-            // 3. CAPTION
+            // CAPTION
             VStack(spacing: 4) {
-                Text("Virtual Mirror")
+                Text(tryOnImage != nil ? "Virtual Try-On" : "Virtual Mirror")
                     .font(.title3)
                     .fontWeight(.bold)
-                Text("Generated from your body specs")
+                Text(tryOnImage != nil ? "Generated with Gemini AI" : "Generated from your body specs")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -100,9 +156,4 @@ struct ClosetHeaderView: View {
             }
         }
     }
-}
-
-
-#Preview {
-    ClosetHeaderView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }
