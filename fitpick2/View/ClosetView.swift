@@ -64,6 +64,12 @@ struct ClosetView: View {
                 Button("Delete", role: .destructive) { viewModel.deleteItem(item) }
             }
         }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TryOnSuggestion"))) { note in
+                if let ids = note.userInfo?["ids"] as? [String] {
+                    // Pre-select suggested items
+                    selectedItemIDs = Set(ids)
+                }
+            }
     }
 }
 

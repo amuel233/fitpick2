@@ -27,6 +27,7 @@ class ClosetViewModel: ObservableObject {
     @Published var tryOnMessage: String? = nil
     
     @Published var userGender: String = "Male"
+    private var calendarObserver: NSObjectProtocol?
     
     private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
     private let db = Firestore.firestore()
@@ -38,6 +39,14 @@ class ClosetViewModel: ObservableObject {
 
     init() {
         startFirestoreListener()
+        // Listen for calendar updates and auto-generate try-on suggestions
+        calendarObserver = NotificationCenter.default.addObserver(forName: Notification.Name("CalendarDidUpdate"), object: nil, queue: .main) { [weak self] note in
+            guard let self = self else { return }
+            let event = note.userInfo?["event"] as? String
+            let suggestions = self.suggestItems(for: event)
+            let ids = suggestions.map { $0.id }
+            NotificationCenter.default.post(name: Notification.Name("TryOnSuggestion"), object: nil, userInfo: ["ids": ids])
+        }
     }
     
     // MARK: - Real-time Data Listener
@@ -264,6 +273,66 @@ class ClosetViewModel: ObservableObject {
     
     func deleteItem(_ item: ClothingItem) {
         db.collection("clothes").document(item.id).delete()
+    }
+
+    /// Suggest clothing items for a given event string using stored AI-generated `subCategory` and `category` metadata.
+    /// Returns a prioritized list of suggestions (may be empty).
+    func suggestItems(for event: String?) -> [ClothingItem] {
+        let txt = (event ?? "").lowercased()
+        if txt.isEmpty {
+            // If no event context, return a few recent items
+            return Array(clothingItems.prefix(3))
+        }
+
+        // Keyword mapping to categories/subcategories (simple heuristic)
+        let mappings: [String: [String]] = [
+            "formal": ["formal", "blazer", "suit", "dress", "heels", "loafers"],
+            "workout": ["workout", "running", "gym", "sneaker", "trainer"],
+            "casual": ["casual", "tee", "jeans", "sneaker", "loafers"],
+            "beach": ["swim", "bikini", "flip", "sandals"],
+            "outdoor": ["jacket", "coat", "windbreaker", "boots"]
+        ]
+
+        // collect candidate items with score
+        var scored: [(item: ClothingItem, score: Int)] = []
+
+        for item in clothingItems {
+            var score = 0
+            let sub = item.subCategory.lowercased()
+            let cat = item.category.rawValue.lowercased()
+
+            // direct substring matches boost score
+            if txt.contains(sub) || sub.contains(txt) { score += 4 }
+            if txt.contains(cat) || cat.contains(txt) { score += 3 }
+
+            // mapping-based matches
+            for (_, keys) in mappings {
+                for k in keys {
+                    if txt.contains(k) && (sub.contains(k) || cat.contains(k) || item.subCategory.lowercased().contains(k)) {
+                        score += 5
+                    }
+                }
+            }
+
+            if score > 0 {
+                scored.append((item, score))
+            }
+        }
+
+        // If we found scored items, sort by score and return top 5
+        if !scored.isEmpty {
+            let sorted = scored.sorted { $0.score > $1.score }.map { $0.item }
+            return Array(sorted.prefix(5))
+        }
+
+        // Fallback: return a few recent items
+        return Array(clothingItems.prefix(3))
+    }
+
+    deinit {
+        listener?.remove()
+        if let obs = calendarObserver {
+            NotificationCenter.default.removeObserver(obs)
         if !item.remoteURL.isEmpty {
             storage.reference(forURL: item.remoteURL).delete { _ in }
         }
