@@ -11,61 +11,47 @@ struct HomeView: View {
     @State private var showCloset: Bool = false
     @StateObject private var viewModel = HomeViewModel()
 
-    // Responsive 2-column grid for true bento layout
+    // Single-column layout so each card spans full width
     private let columns = [
-        GridItem(.flexible()),
         GridItem(.flexible())
     ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: Theme.cardSpacing) {
-                    
-                    // MARK: - Row 1
-                    // MOVED TO TOP: Time-based greeting card spans full width
-                    TimeGreetingCard(greeting: viewModel.timeBasedGreeting, message: viewModel.morningBriefing)
-                        .gridCellColumns(2) // This '2' matches your 'columns' array count to span full width
+                VStack(spacing: Theme.cardSpacing) {
+                    // Top area: Greeting + Agentic Header occupy full width
+                    TimeGreetingCard(greeting: viewModel.timeBasedGreeting, message: viewModel.morningBriefing, temperature: viewModel.temperatureString, location: viewModel.locationString, tryOnAvailable: viewModel.tryOnAvailable, tryOnAction: {
+                        appState.selectedTab = viewModel.closetTabIndex
+                    })
 
-                    // MARK: - Row 2
-                    // MOVED DOWN: Sync Calendar card spans full width/*
-                    /*SyncCalendarCard(syncAction: {
-                        NotificationCenter.default.post(name: Notification.Name("SyncCalendarRequested"), object: nil)
-                    }, tryOnAction: { showCloset = true })
-                        .gridCellColumns(2)
-                        */
+                    AgenticHeader(gap: viewModel.gapDetectionMessage, tryOnAction: {
+                        if let gap = viewModel.gapDetectionMessage, gap.useTryOn {
+                            appState.selectedTab = viewModel.closetTabIndex
+                        }
+                    })
 
-                    // MARK: - Row 3
-                    // Agentic Header spans full width
-                    AgenticHeader()
-                        .gridCellColumns(2)
+                    // Responsive grid for remaining cards (adaptive columns)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: Theme.cardSpacing)], spacing: Theme.cardSpacing) {
 
-                    // MARK: - Row 4
-                    // Gap Detection card (if available) spans full width
-                    if let gap = viewModel.gapDetectionMessage {
-                        GapDetectionCard(gap: gap)
-                            .gridCellColumns(2)
+                        HStack(spacing: Theme.cardSpacing) {
+                            SmartWardrobePulse()
+                                .frame(maxWidth: .infinity)
+                            WeatherAccessoryTip()
+                                .frame(maxWidth: .infinity)
+                        }
+
+                        // Solo Sustainability card removed (CombinedWardrobeCard covers this)
+
+                        // Morning briefing card removed
+
+                        TrendingFashionNews()
                     }
-
-                    // MARK: - Row 5
-                    // Hero suggestion spans full width
-                    HeroSuggestionCard(outfitImage: viewModel.heroImageURL)
-                    .gridCellColumns(2)
-
-                    // MARK: - Row 6
-                    // Split row: Wardrobe Stats + Weather Tip (1 column each)
-                    CombinedWardrobeCard(score: viewModel.sustainabilityScore)
-                        .gridCellColumns(1)
-
-                    WeatherAccessoryTip()
-                        .gridCellColumns(1)
-
-                    // MARK: - Row 7
-                    // Trending news spans full width
-                    TrendingFashionNews()
-                        .gridCellColumns(2)
                 }
-                .padding(Theme.cardSpacing + 4)
+                .padding(Theme.cardSpacing)
+            }
+            .refreshable {
+                viewModel.refreshAll()
             }
             .navigationTitle(viewModel.navigationTitle)
             .background(viewModel.backgroundColor.edgesIgnoringSafeArea(.all))
@@ -77,26 +63,105 @@ struct HomeView: View {
     }
 }
 
+extension TimeGreetingCard {
+    static func gradientForCurrentTime() -> [Color] {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 6..<12:
+            return [Color.yellow.opacity(0.12), Color.orange.opacity(0.08)]
+        case 12..<18:
+            return [Color.blue.opacity(0.08), Color.purple.opacity(0.08)]
+        case 18..<22:
+            return [Color.purple.opacity(0.12), Color.indigo.opacity(0.16)]
+        default:
+            return [Color.black.opacity(0.12), Color.gray.opacity(0.12)]
+        }
+    }
+
+    static func iconNameForCurrentTime() -> String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 6..<12: return "sun.max.fill"
+        case 12..<18: return "cloud.sun.fill"
+        case 18..<22: return "moon.stars.fill"
+        default: return "moon.stars.fill"
+        }
+    }
+
+    static func iconColorForCurrentTime() -> Color {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 6..<12: return Color.yellow
+        case 12..<18: return Color.yellow
+        case 18..<22: return Color.white
+        default: return Color.white
+        }
+    }
+}
+
 // MARK: - Card Components
 struct TimeGreetingCard: View {
     let greeting: String
     let message: String
+    let temperature: String?
+    let location: String?
+    let tryOnAvailable: Bool
+    let tryOnAction: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(greeting)
-                .font(.system(.title, design: .rounded).weight(.bold))
-                .foregroundColor(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: Self.iconNameForCurrentTime())
+                    .font(.title2)
+                    .foregroundStyle(Self.iconColorForCurrentTime())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(greeting)
+                        .font(.system(.title, design: .rounded).weight(.bold))
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let temp = temperature {
+                        HStack(spacing: 8) {
+                            Text(temp)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(.secondary)
+                            if let loc = location {
+                                Text("· \(loc)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                Spacer()
+            }
 
             Text(message)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if tryOnAvailable {
+                HStack {
+                    Spacer()
+                    Button(action: { tryOnAction?() }) {
+                        Text("Try On")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color("fitPickGold"))
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 140)
         .padding(Theme.cardPadding)
+        .background(
+            LinearGradient(gradient: Gradient(colors: Self.gradientForCurrentTime()), startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .cornerRadius(Theme.cornerRadius)
+        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [
@@ -112,159 +177,13 @@ struct TimeGreetingCard: View {
     }
 }
 
-struct SyncCalendarCard: View {
-    let syncAction: () -> Void
-    let tryOnAction: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.title2)
-                    .foregroundColor(.blue)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Sync Your Calendar")
-                        .font(.headline.weight(.semibold))
-                        .foregroundColor(.primary)
-                    Text("Sync your calendar to get suggestions for events")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-            }
-
-            HStack(spacing: 12) {
-                Button(action: syncAction) {
-                    Text("Sync")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(minWidth: 100)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-
-                Spacer()
-
-                Button(action: tryOnAction) {
-                    Text("Try-On")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(minWidth: 100)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.bordered)
-                .tint(Theme.accent)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial)
-        .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
-    }
-}
-
-struct CombinedWardrobeCard: View {
-    let score: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Sustainability section
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    Image(systemName: "leaf.fill")
-                        .font(.title2)
-                        .foregroundColor(.green)
-                    Text("Sustainability")
-                        .font(.headline.weight(.semibold))
-                }
-                Text(score)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            Divider()
-            
-            // Wardrobe Pulse section
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    Image(systemName: "chart.pie.fill")
-                        .font(.title2)
-                        .foregroundColor(.purple)
-                    Text("Wardrobe Pulse")
-                        .font(.headline.weight(.semibold))
-                }
-                Text("Your wardrobe is 72% utilized this week.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            Spacer()
-        }
-        .frame(minHeight: 180)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial)
-        .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
-    }
-}
-
-struct SustainabilityCard: View {
-    let score: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "leaf.fill")
-                    .font(.title2)
-                    .foregroundColor(.green)
-                Text("Sustainability")
-                    .font(.headline.weight(.semibold))
-            }
-            Text(score)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(minHeight: 140)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial)
-        .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
-    }
-}
-
-struct MorningBriefingCard: View {
-    let message: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "sunrise.fill")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                Text("Morning Briefing")
-                    .font(.headline.weight(.semibold))
-            }
-            Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-        }
-        .frame(minHeight: 140)
-        .padding(Theme.cardPadding)
-        .background(.regularMaterial)
-        .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
-    }
-}
+// Sustainability/combined card removed; SmartWardrobePulse provides current pulse and upload CTA.
 
 struct GapDetectionCard: View {
     let gap: HomeViewModel.GapMessage
+    let tryOnAction: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -275,9 +194,15 @@ struct GapDetectionCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Style Gap Detected")
                         .font(.headline.weight(.semibold))
-                    Text(gap.title)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if gap.useTryOn {
+                        Text(gap.title)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("(No suitable clothes for event)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 Spacer()
             }
@@ -285,21 +210,31 @@ struct GapDetectionCard: View {
             Text(gap.detail)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             HStack {
                 Spacer()
-                Button(action: {
-                    if let url = URL(string: gap.externalURL) {
-                        UIApplication.shared.open(url)
+                if gap.useTryOn {
+                    Button(action: { tryOnAction?() }) {
+                        Text("Try On")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
                     }
-                }) {
-                    Text("View Picks")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color("fitPickGold"))
+                } else {
+                    Button(action: {
+                        if let url = URL(string: gap.externalURL) {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        Text("View Picks")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.accentColor)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
             }
         }
         .padding(Theme.cardPadding)
@@ -324,17 +259,24 @@ final class HomeViewModel: ObservableObject {
     @Published var navigationTitle: String
     @Published var gapDetectionMessage: GapMessage?
     @Published var timeBasedGreeting: String
+    @Published var locationString: String? = nil
+    @Published var temperatureString: String? = nil
 
     struct GapMessage {
         let title: String
         let detail: String
         let externalURL: String
+        let useTryOn: Bool
     }
+    private var lastCoordinates: (Double, Double)? = nil
+
 
     
     
     private let firestore: FirestoreManager
     private let calendar: CalendarManager
+    private let weather = WeatherManager()
+    private var calendarObserver: NSObjectProtocol?
     
         init(closetTabIndex: Int = 1,
             cornerRadius: CGFloat = Theme.cornerRadius,
@@ -356,9 +298,189 @@ final class HomeViewModel: ObservableObject {
         self.firestore = firestore
         self.calendar = calendar
         self.timeBasedGreeting = Self.computeTimeBasedGreeting()
+        self.morningBriefing = Self.computeTimeBasedBriefing()
         
         // Load dynamic data
         loadDynamicContent()
+
+        // Fetch location-based temperature
+        weather.requestLocation { [weak self] res in
+            switch res {
+            case .success((let lat, let lon)):
+                self?.lastCoordinates = (lat, lon)
+                self?.weather.fetchTemperature(lat: lat, lon: lon) { tempRes in
+                    switch tempRes {
+                    case .success(let temp):
+                        DispatchQueue.main.async {
+                            self?.temperatureString = String(format: "%.0f°C", temp)
+                        }
+                    case .failure(_): break
+                    }
+                }
+
+                self?.weather.reverseGeocode(lat: lat, lon: lon) { locRes in
+                    switch locRes {
+                    case .success(let locality):
+                        DispatchQueue.main.async {
+                            self?.locationString = locality
+                        }
+                    case .failure(_): break
+                    }
+                }
+
+            case .failure(_): break
+            }
+        }
+
+        // Listen for calendar updates (from AgenticHeader) — only re-evaluate Try-On suggestions when an event arrives
+            // Listen for calendar updates (from AgenticHeader) — handle combined style gap + weather + try-on
+            calendarObserver = NotificationCenter.default.addObserver(forName: Notification.Name("CalendarDidUpdate"), object: nil, queue: .main) { [weak self] note in
+                guard let self = self else { return }
+                let event = note.userInfo?["event"] as? String
+                let eventDate = note.userInfo?["eventDate"] as? Date
+                if let event = event, !event.isEmpty {
+                    self.handleCalendarEvent(event: event, date: eventDate)
+                }
+            }
+    }
+
+    @Published var tryOnAvailable: Bool = false
+
+    // Handle a calendar event: compute weather for date, check wardrobe, and set gapDetectionMessage accordingly
+    func handleCalendarEvent(event: String, date: Date?) {
+        // Heuristic mapping from event keywords to required subcategories
+        let lower = event.lowercased()
+        var required: [String] = ["Top"]
+        if lower.contains("formal") || lower.contains("gala") || lower.contains("black tie") {
+            required = ["Formal", "Heels"]
+        } else if lower.contains("meeting") || lower.contains("interview") || lower.contains("presentation") {
+            required = ["Blazer", "Shirt"]
+        } else if lower.contains("workout") || lower.contains("run") || lower.contains("yoga") {
+            required = ["Activewear"]
+        } else if lower.contains("beach") || lower.contains("pool") {
+            required = ["Swim"]
+        }
+
+        // Fetch wardrobe counts
+        firestore.fetchWardrobeCounts { [weak self] counts in
+            guard let self = self else { return }
+            let availableCount = required.reduce(0) { $0 + (counts[$1] ?? 0) }
+            let hasItems = availableCount > 0
+
+            // Prepare weather snippet if we have coordinates and a date
+            var weatherSnippet: String? = nil
+            if let coords = self.lastCoordinates, let d = date {
+                self.weather.fetchForecast(lat: coords.0, lon: coords.1, forDate: d) { res in
+                    switch res {
+                    case .success(let forecast):
+                        let temper = Int(round((forecast.max + forecast.min) / 2.0))
+                        weatherSnippet = "Expect \(temper)°C, \(forecast.condition)"
+                    case .failure(_):
+                        weatherSnippet = nil
+                    }
+
+                    DispatchQueue.main.async {
+                        self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet)
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet)
+                }
+            }
+        }
+    }
+
+    private func updateGapMessage(event: String, required: [String], hasItems: Bool, weatherSnippet: String?) {
+        let title: String
+        if hasItems {
+            title = "Suggested Outfit Available"
+        } else {
+            title = "Style Gap Detected"
+        }
+
+        let outfit = required.joined(separator: ", ")
+        var detail = "Suggested: \(outfit) for \(event)."
+        if let w = weatherSnippet {
+            detail += " \(w)."
+        }
+
+        if hasItems {
+            self.tryOnAvailable = true
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", useTryOn: true)
+        } else {
+            self.tryOnAvailable = false
+            // build google search URL including all required items and location
+            let items = required.joined(separator: " ")
+            let loc = self.locationString ?? ""
+            let rawQuery = loc.isEmpty ? "buy \(items)" : "buy \(items) in \(loc)"
+            let query = rawQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "buy+\(items)"
+            let url = "https://www.google.com/search?q=\(query)"
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: url, useTryOn: false)
+        }
+    }
+
+    /// Build a Google search URL for the provided items and optional event description, using the detected `locationString` when available.
+    private func buildGoogleSearchURL(for items: [String], event: String? = nil) -> String {
+        let itemsPart = items.joined(separator: " ")
+        var rawQuery = "buy \(itemsPart)"
+        if let e = event, !e.isEmpty {
+            rawQuery += " for \(e)"
+        }
+        if let loc = self.locationString, !loc.isEmpty {
+            rawQuery += " in \(loc)"
+        }
+        let query = rawQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? itemsPart.replacingOccurrences(of: " ", with: "+")
+        return "https://www.google.com/search?q=\(query)"
+    }
+
+    /// Decide whether a try-on suggestion should be offered for the given event
+    func evaluateTryOn(for event: String?) {
+        let upcoming = event ?? ""
+        firestore.fetchWardrobeCounts { [weak self] counts in
+            guard let self = self else { return }
+
+            // Simple heuristic: if event looks formal, require formal shoes; otherwise require at least one item
+            let isFormal = upcoming.localizedCaseInsensitiveContains("formal") || upcoming.localizedCaseInsensitiveContains("black tie") || upcoming.localizedCaseInsensitiveContains("gala")
+            let formalCount = (counts["Heels"] ?? 0) + (counts["Formal"] ?? 0)
+            let totalItems = counts.values.reduce(0, +)
+
+            DispatchQueue.main.async {
+                if isFormal {
+                    self.tryOnAvailable = formalCount > 0
+                        if !self.tryOnAvailable {
+                        let url = self.buildGoogleSearchURL(for: ["Formal","Heels"], event: upcoming)
+                        self.gapDetectionMessage = GapMessage(
+                            title: "Style Gap: No formal shoes found",
+                            detail: "We couldn't find formal shoes in your closet metadata. View suggested picks.",
+                            externalURL: url,
+                            useTryOn: false
+                        )
+                    } else {
+                        self.gapDetectionMessage = nil
+                    }
+                } else {
+                    self.tryOnAvailable = totalItems > 0
+                    if !self.tryOnAvailable {
+                        let url = self.buildGoogleSearchURL(for: ["clothing"], event: upcoming)
+                        self.gapDetectionMessage = GapMessage(
+                            title: "Style Gap: Empty wardrobe",
+                            detail: "We couldn't find suitable items in your closet.",
+                            externalURL: url,
+                            useTryOn: false
+                        )
+                    } else {
+                        self.gapDetectionMessage = nil
+                    }
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let obs = calendarObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
     }
     
     private func loadDynamicContent() {
@@ -369,42 +491,78 @@ final class HomeViewModel: ObservableObject {
             }
         }
         
-        // Fetch calendar event and wardrobe counts and compute gap detection
-        calendar.fetchNextEvent { [weak self] event in
+        // Fetch calendar event details and compute gap detection (keeps 'Suggested' state)
+        calendar.fetchNextEventDetail { [weak self] event, date in
             guard let self = self, let event = event else { return }
-            
-            self.firestore.fetchWardrobeCounts { counts in
-                // Detect "Formal" keyword in event summary
-                let isFormalEvent = event.localizedCaseInsensitiveContains("formal")
-                
-                // Count likely formal shoes (Heels, Formal etc.)
-                let formalShoesCount = counts["Heels", default: 0] + counts["Formal", default: 0]
-                
-                if isFormalEvent && formalShoesCount == 0 {
-                    DispatchQueue.main.async {
-                        self.gapDetectionMessage = GapMessage(
-                            title: "Style Gap: No formal shoes found for upcoming event",
-                            detail: "We couldn't find formal shoes in your closet metadata. View AI-matched picks.",
-                            externalURL: "https://www.example-store.com/formal-shoes"
-                        )
+            // Reuse the same calendar-event handling pipeline so suggested outfits persist after refresh
+            DispatchQueue.main.async {
+                self.handleCalendarEvent(event: event, date: date)
+            }
+        }
+    }
+
+    /// Public refresh entry used by pull-to-refresh in the UI
+    func refreshAll() {
+        // Reload hero, calendar, and wardrobe state
+        loadDynamicContent()
+
+        // Refresh temperature and location
+        weather.requestLocation { [weak self] res in
+            guard let self = self else { return }
+            switch res {
+            case .success((let lat, let lon)):
+                self.lastCoordinates = (lat, lon)
+                self.weather.fetchTemperature(lat: lat, lon: lon) { tempRes in
+                    switch tempRes {
+                    case .success(let temp):
+                        DispatchQueue.main.async { self.temperatureString = String(format: "%.0f°C", temp) }
+                    case .failure(_): break
                     }
                 }
+
+                self.weather.reverseGeocode(lat: lat, lon: lon) { locRes in
+                    switch locRes {
+                    case .success(let locality):
+                        DispatchQueue.main.async { self.locationString = locality }
+                    case .failure(_): break
+                    }
+                }
+            case .failure(_): break
             }
+        }
+        // Notify other components to refresh (e.g., trending news)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Notification.Name("HomeDidRefresh"), object: nil)
         }
     }
     
     static func computeTimeBasedGreeting() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
-        
         switch hour {
-        case 0..<12:
-            return "Good Morning"
-        case 12..<17:
-            return "Good Afternoon"
-        case 17..<21:
-            return "Good Evening"
+        case 5..<12:
+            return "Good morning"
+        case 12..<18:
+            return "Good afternoon"
+        case 18..<22:
+            return "Good evening"
         default:
-            return "Good Night"
+            return "Good night"
+        }
+    }
+
+    static func computeTimeBasedBriefing() -> String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<9:
+            return "Light layers are recommended for cooler mornings."
+        case 9..<12:
+            return "A casual smart look works well for mixed plans."
+        case 12..<18:
+            return "Consider breathable fabrics for daytime comfort."
+        case 18..<22:
+            return "Dress up for night events or relax with comfortable layers."
+        default:
+            return "Keep it cozy and comfortable for winding down."
         }
     }
 }

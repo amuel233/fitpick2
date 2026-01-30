@@ -6,6 +6,7 @@
 //
 
 import FirebaseFirestore
+import FirebaseAuth
 import SwiftUI
 
 class FirestoreManager: ObservableObject {
@@ -64,6 +65,42 @@ class FirestoreManager: ObservableObject {
             }
             completion(counts)
         }
+    }
+
+    /// Fetch number of clothes uploaded in the last `days` and how many of those were used in socials posts in the same period.
+    func fetchWardrobePulse(lastDays: Int = 7, completion: @escaping (_ totalUploaded: Int, _ usedCount: Int) -> Void) {
+        guard let userEmail = Auth.auth().currentUser?.email else { completion(0,0); return }
+
+        let since = Date().addingTimeInterval(TimeInterval(-lastDays * 24 * 60 * 60))
+
+        // 1) fetch clothes uploaded in the last `lastDays`
+        db.collection("clothes")
+            .whereField("ownerEmail", isEqualTo: userEmail)
+            .whereField("createdat", isGreaterThan: Timestamp(date: since))
+            .getDocuments { clothesSnap, err in
+                guard let clothesDocs = clothesSnap?.documents else {
+                    completion(0,0); return
+                }
+
+                let uploaded = clothesDocs.count
+                // collect image URLs from clothes
+                let imageURLs: Set<String> = Set(clothesDocs.compactMap { $0.data()["imageURL"] as? String })
+
+                // 2) fetch socials by user in same timeframe
+                self.db.collection("socials")
+                    .whereField("userEmail", isEqualTo: userEmail)
+                    .whereField("timestamp", isGreaterThan: Timestamp(date: since))
+                    .getDocuments { postsSnap, _ in
+                        var used = 0
+                        if let posts = postsSnap?.documents {
+                            let postUrls = posts.compactMap { $0.data()["imageUrl"] as? String }
+                            for u in imageURLs {
+                                if postUrls.contains(u) { used += 1 }
+                            }
+                        }
+                        completion(uploaded, used)
+                    }
+            }
     }
     
     func fetchUserMeasurements(email: String, completion: @escaping ([String: Double]?) -> Void) {
