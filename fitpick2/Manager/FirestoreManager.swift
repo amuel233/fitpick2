@@ -16,6 +16,29 @@ class FirestoreManager: ObservableObject {
     @Published var users = [User]()
     @Published var posts: [SocialsPost] = []
     
+    @Published var currentEmail: String? = Auth.auth().currentUser?.email
+    @Published var currentUserData: User?
+    
+    init() {
+        fetchSocialPosts()
+        if let email = currentEmail {
+            startCurrentUserListener(email: email)
+        }
+    }
+    
+    func startCurrentUserListener(email: String) {
+        db.collection("users").document(email).addSnapshotListener { snapshot, _ in
+            guard let data = snapshot?.data() else { return }
+            self.currentUserData = User(
+                id: email,
+                username: data["username"] as? String ?? "",
+                selfie: data["selfie"] as? String ?? "",
+                following: data["following"] as? [String] ?? []
+            )
+        }
+    }
+    
+    
     // Create
     func addUser(documentID: String, email: String, selfie: String) {
         
@@ -195,18 +218,16 @@ class FirestoreManager: ObservableObject {
         }
     }
     
-    func fetchUsername(for email: String, completion: @escaping (String) -> Void) {
-        db.collection("users").document(email).getDocument { document, error in
-            if let document = document, document.exists {
-                let data = document.data()
-                // Assuming your user document has a "username" field
-                let username = data?["username"] as? String ?? "User"
-                completion(username)
-            } else {
-                // Fallback to the first part of the email if document isn't found
-                let fallback = email.components(separatedBy: "@").first ?? "User"
-                completion(fallback)
-            }
+    // MARK: - Follow Logic
+    func toggleFollow(currentEmail: String, targetEmail: String, isFollowing: Bool) {
+        let currentUserRef = db.collection("users").document(currentEmail)
+        
+        if isFollowing {
+            // UNFOLLOW: Remove target email from my following list
+            currentUserRef.updateData(["following": FieldValue.arrayRemove([targetEmail])])
+        } else {
+            // FOLLOW: Add target email to my following list
+            currentUserRef.updateData(["following": FieldValue.arrayUnion([targetEmail])])
         }
     }
     

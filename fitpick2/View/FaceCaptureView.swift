@@ -6,32 +6,41 @@
 //
 
 import SwiftUI
-import AVFoundation
-import Vision
+import PhotosUI
 
 struct FaceCaptureView: View {
     @StateObject var camera = SelfieCameraManager()
     @Binding var selectedImage: UIImage?
+
     @Environment(\.dismiss) var dismiss
     
     @State private var showInstructions = true
-    @State private var isFaceDetected = false
+    @State private var pickerItem: PhotosPickerItem?
+    
+    // Logic to disable camera and show loading during gallery processing
+    @State private var isProcessingGallery = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
     
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
+    let fitPickBlack = Color(red: 26/255, green: 26/255, blue: 27/255)
+
+    let ovalWidth: CGFloat = 350
+    let ovalHeight: CGFloat = 500
 
     var body: some View {
         ZStack {
             fitPickBlack.ignoresSafeArea()
 
             if let previewImage = camera.capturedImage {
-                // --- REVIEW MODE ---
                 VStack(spacing: 20) {
                     Text("Review Your Selfie").font(.headline).foregroundColor(fitPickGold)
-
+                    
                     Image(uiImage: previewImage)
-                        .resizable().scaledToFill()
-                        .frame(width: 280, height: 380).clipShape(Ellipse())
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: ovalWidth, height: ovalHeight)
+                        .clipShape(Ellipse())
                         .overlay(Ellipse().stroke(fitPickGold, lineWidth: 3))
 
                     HStack(spacing: 40) {
@@ -43,47 +52,98 @@ struct FaceCaptureView: View {
                         Button("Use Photo") {
                             selectedImage = previewImage
                             dismiss()
-                        }.padding().background(fitPickGold).foregroundColor(.black).cornerRadius(10)
+                        }
+                        .padding()
+                        .background(fitPickGold)
+                        .foregroundColor(.black)
+                        .cornerRadius(10)
                     }
                 }
             } else {
-                // --- LIVE CAMERA MODE ---
                 ZStack {
-                    SelfieCameraPreview(session: camera.session).ignoresSafeArea()
-                    
-                    // Oval Mask: Changes color based on face detection
-                    Color.black.opacity(0.5).mask(ZStack {
-                        Rectangle()
-                        Ellipse().frame(width: 260, height: 360).blendMode(.destinationOut)
-                    })
+                    // Disable camera preview layer visually when processing
+                    SelfieCameraPreview(session: camera.session)
+                        .ignoresSafeArea()
+                        .opacity(isProcessingGallery ? 0.5 : 1.0)
 
-                    // The stroke turns GREEN when a face is detected
+                    Color.black.opacity(0.5).mask(
+                        ZStack {
+                            Rectangle()
+                            Ellipse()
+                                .frame(width: ovalWidth, height: ovalHeight)
+                                .blendMode(.destinationOut)
+                        }
+                    )
+
                     Ellipse()
-                        .stroke(isFaceDetected ? .green : fitPickGold, lineWidth: 3)
-                        .frame(width: 260, height: 360)
+                        .stroke(camera.isFaceInFrame ? Color.green : fitPickGold, lineWidth: 3)
+                        .frame(width: ovalWidth, height: ovalHeight)
                     
-                    // --- UI OVERLAY LAYER ---
-                    // Using a separate VStack for instructions and capture button to keep them centered
                     VStack {
-                        if isFaceDetected {
-                            Text("Face Detected").foregroundColor(.green).bold().padding(.top, 50)
+                        if !camera.faceStatus.rawValue.isEmpty && !isProcessingGallery {
+                            Text(camera.faceStatus.rawValue)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(camera.isFaceInFrame ? .green : .white)
+                                .padding(.vertical, 10).padding(.horizontal, 20)
+                                .background(Color.black.opacity(0.7)).clipShape(Capsule())
+                                .padding(.top, 60)
+                        }
+                        
+                        // Show a spinner while checking the uploaded photo
+                        if isProcessingGallery {
+                            VStack(spacing: 10) {
+                                ProgressView()
+                                    .tint(fitPickGold)
+                                    .scaleEffect(1.5)
+                                Text("Checking Photo...")
+                                    .foregroundColor(fitPickGold)
+                                    .font(.caption.bold())
+                            }
+                            .padding(20)
+                            .background(Color.black.opacity(0.8))
+                            .cornerRadius(15)
+                            .padding(.top, 40)
                         }
                         
                         Spacer()
                         
-                        Button(action: { camera.takePhoto() }) {
-                            Circle()
-                                .strokeBorder(isFaceDetected ? .green : fitPickGold, lineWidth: 4)
-                                .frame(width: 75, height: 75)
-                                .background(isFaceDetected ? Color.green.opacity(0.2) : Color.clear)
-                                .clipShape(Circle())
+                        HStack(spacing: 60) {
+                            PhotosPicker(selection: $pickerItem, matching: .images) {
+                                VStack {
+                                    Image(systemName: "face.smiling")
+                                        .font(.system(size: 40, weight: .bold))
+                                        .foregroundStyle(
+                                            LinearGradient(
+                                                colors: [.white, fitPickGold],
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                        )
+                                }
+                                .foregroundColor(.white)
+                            }
+                            .disabled(isProcessingGallery) // Prevent multiple taps
+
+                            Button(action: { camera.takePhoto() }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(camera.isFaceInFrame ? fitPickGold : Color.gray.opacity(0.5))
+                                        .frame(width: 70, height: 70)
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 3)
+                                        .frame(width: 80, height: 80)
+                                }
+                            }
+                            .disabled(!camera.isFaceInFrame || isProcessingGallery)
+
+                            VStack {
+                                Image(systemName: "photo").font(.system(size: 28)).opacity(0)
+                                Text("Space").font(.caption2).opacity(0)
+                            }
                         }
                         .padding(.bottom, 40)
-                        .disabled(!isFaceDetected)
                     }
 
-                    // --- DISMISS BUTTON LAYER ---
-                    // Placing this last in the ZStack with an explicit alignment to avoid breaking the layout
                     VStack {
                         HStack {
                             Spacer()
@@ -97,38 +157,50 @@ struct FaceCaptureView: View {
                         Spacer()
                     }
                 }
-                .onAppear {
-                    camera.startSession()
-                    setupFaceDetection()
-                }
-            }
-
-            // --- INSTRUCTIONS ---
-            if showInstructions {
-                ZStack {
-                    Color.black.opacity(0.95).ignoresSafeArea()
-                    VStack(spacing: 30) {
-                        Image(systemName: "face.dashed").font(.system(size: 80)).foregroundColor(fitPickGold)
-                        Text("Selfie Instructions").font(.title2).bold().foregroundColor(fitPickGold)
+                .onAppear { camera.startSession() }
+                .onChange(of: pickerItem) { oldItem, newItem in
+                    guard let newItem else { return }
+                    
+                    Task {
+                        // Disable camera logic
+                        await MainActor.run {
+                            isProcessingGallery = true
+                            camera.session.stopRunning() // Stop camera sensor
+                        }
                         
-                        VStack(alignment: .leading, spacing: 15) {
-                            HStack { Image(systemName: "lightbulb.fill"); Text("Ensure good lighting.") }
-                            HStack { Image(systemName: "person.fill.viewfinder"); Text("Align face in the oval.") }
-                        }.foregroundColor(.white)
-
-                        Button("Got it!") { showInstructions = false }
-                            .padding().frame(maxWidth: .infinity).background(fitPickGold).foregroundColor(.black).cornerRadius(12).padding(.horizontal, 60)
+                        if let data = try? await newItem.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            
+                            camera.validateGalleryImage(image) { success, message in
+                                DispatchQueue.main.async {
+                                    isProcessingGallery = false
+                                    if success {
+                                        camera.capturedImage = image
+                                    } else {
+                                        self.alertMessage = message
+                                        self.showAlert = true
+                                        self.pickerItem = nil
+                                        camera.startSession() // Restart camera if photo failed
+                                    }
+                                }
+                            }
+                        } else {
+                            await MainActor.run {
+                                isProcessingGallery = false
+                                camera.startSession()
+                            }
+                        }
                     }
                 }
+                .alert("Invalid Selfie", isPresented: $showAlert) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text(alertMessage)
+                }
             }
-        }
-    }
 
-    // Logic to detect if a face is in the frame
-    private func setupFaceDetection() {
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            withAnimation {
-                self.isFaceDetected = camera.isFaceInFrame
+            if showInstructions {
+                InstructionOverlay(fitPickGold: fitPickGold) { showInstructions = false }
             }
         }
     }
