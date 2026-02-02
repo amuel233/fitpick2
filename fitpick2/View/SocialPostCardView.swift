@@ -54,23 +54,57 @@ struct SocialPostCardView: View {
             // --- IMAGE SECTION ---
             ZStack(alignment: .topTrailing) {
                 AsyncImage(url: URL(string: post.imageUrl)) { phase in
-                    if let image = phase.image {
-                        image.resizable()
+                    switch phase {
+                    case .empty:
+                        // This shows WHILE the image is downloading
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.1))
+                            
+                            VStack(spacing: 10) {
+                                ProgressView()
+                                    .tint(goldColor)
+                                Text("Fetching latest trends...")
+                                    .font(.caption2)
+                                    .foregroundColor(goldColor)
+                            }
+                        }
+                        .frame(width: UIScreen.main.bounds.width - 32, height: 400)
+                        
+                    case .success(let image):
+                        // This shows when the image is READY
+                        image
+                            .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: UIScreen.main.bounds.width - 32, height: 400)
                             .clipped()
                             .cornerRadius(12)
-                    } else {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.white.opacity(0.05))
-                            .frame(height: 400)
+                            
+                    case .failure:
+                        // This shows if the link is broken or internet fails
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(goldColor.opacity(0.1))
+                            
+                            VStack(spacing: 8) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .font(.largeTitle)
+                                Text("Failed to load photo")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(goldColor)
+                        }
+                        .frame(width: UIScreen.main.bounds.width - 32, height: 400)
+                        
+                    @unknown default:
+                        EmptyView()
                     }
                 }
                 
                 // AI Button
                 Button(action: {
                     print("AI Try On Triggered")
-                    // TODO: ADD LOGIC HERE FOR AI TRY ON
+                    // TODO: ADD LOGIC HERE
                 }) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 18, weight: .bold))
@@ -110,6 +144,13 @@ struct SocialPostCardView: View {
                     (Text(post.username).bold().foregroundColor(goldColor) + Text(" ") + Text(post.caption).foregroundColor(.black))
                         .font(.subheadline)
                 }
+                
+                // Timestamp
+                Text(post.timestamp, style: .relative)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .padding(.top, 2)
+                    .textCase(.uppercase)
             }
             .padding(.horizontal)
         }
