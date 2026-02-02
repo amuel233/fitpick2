@@ -154,6 +154,44 @@ class FirestoreManager: ObservableObject {
         }
     
     // MARK: - Socials Feed Listener
+    
+    func updateUsernameEverywhere(email: String, oldUsername: String, newUsername: String) {
+        let socialsRef = db.collection("socials")
+        
+        // Query posts authored by the user
+        socialsRef.whereField("userEmail", isEqualTo: email).getDocuments { snapshot, _ in
+            let batch = self.db.batch()
+            
+            snapshot?.documents.forEach { doc in
+                batch.updateData(["username": newUsername], forDocument: doc.reference)
+            }
+            
+            // Query posts liked by the user
+            socialsRef.whereField("likedBy", arrayContains: email).getDocuments { likedSnapshot, _ in
+                
+                likedSnapshot?.documents.forEach { doc in
+                    // In Firestore, you can't "update" a specific index in an array easily.
+                    // We remove the old name and add the new one.
+                    batch.updateData([
+                        "likedByNames": FieldValue.arrayRemove([oldUsername])
+                    ], forDocument: doc.reference)
+                    
+                    batch.updateData([
+                        "likedByNames": FieldValue.arrayUnion([newUsername])
+                    ], forDocument: doc.reference)
+                }
+                
+                // Commit all changes at once
+                batch.commit { error in
+                    if let error = error {
+                        print("Batch update failed: \(error.localizedDescription)")
+                    } else {
+                        print("Username updated in posts and likes successfully!")
+                    }
+                }
+            }
+        }
+    }
         
     func fetchSocialPosts() {
         db.collection("socials")

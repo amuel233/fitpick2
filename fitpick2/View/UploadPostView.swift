@@ -15,76 +15,238 @@ struct UploadPostView: View {
     @State private var caption: String = ""
     @State private var isUploading = false
     
+    // Adjustment States
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    
+    // Preview States
+    @State private var showPreview = false
+    @State private var finalRenderedImage: UIImage? = nil
+    
     @EnvironmentObject var session: UserSession
     @Environment(\.dismiss) var dismiss
     
     let fitPickGold = Color("fitPickGold")
     let fitPickBlack = Color(red: 26/255, green: 26/255, blue: 27/255)
 
+    // MARK: - Rendered View
+    var adjustedImageView: some View {
+        ZStack {
+            if let image = postImage {
+                GeometryReader { geo in
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+            }
+        }
+        .frame(width: 400, height: 400)
+        .clipped()
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 fitPickBlack.ignoresSafeArea()
-                
-                VStack(spacing: 25) {
-                    PhotosPicker(selection: $selectedItem, matching: .images) {
-                        if let image = postImage {
-                            Image(uiImage: image).resizable().scaledToFill()
-                                .frame(height: 500).frame(maxWidth: .infinity)
-                                .cornerRadius(15).clipped()
-                                .overlay(RoundedRectangle(cornerRadius: 15).stroke(fitPickGold, lineWidth: 1))
-                        } else {
-                            RoundedRectangle(cornerRadius: 15).fill(Color.white.opacity(0.1))
-                                .frame(height: 500)
-                                .overlay(VStack {
-                                    Image(systemName: "photo.on.rectangle.angled").font(.largeTitle)
-                                    Text("Upload your photo").font(.callout)
-                                }.foregroundColor(fitPickGold))
+                .onTapGesture {
+                            hideKeyboard()
                         }
-                    }
-                    .onChange(of: selectedItem) { _, newValue in
-                        Task {
-                            if let data = try? await newValue?.loadTransferable(type: Data.self) {
-                                postImage = UIImage(data: data)
+                
+                VStack(spacing: 0) {
+                    // Image Section
+                    Group {
+                        if let _ = postImage {
+                            adjustedImageView
+                                .overlay(RoundedRectangle(cornerRadius: 15).stroke(fitPickGold, lineWidth: 1))
+                                .cornerRadius(15)
+                                .gesture(
+                                    DragGesture()
+                                        .onChanged { value in
+                                            offset = CGSize(
+                                                width: lastOffset.width + value.translation.width,
+                                                height: lastOffset.height + value.translation.height
+                                            )
+                                        }
+                                        .onEnded { _ in lastOffset = offset }
+                                )
+                                .gesture(
+                                    MagnificationGesture()
+                                        .onChanged { value in
+                                            scale = lastScale * value
+                                        }
+                                        .onEnded { _ in lastScale = scale }
+                                )
+                                .overlay(controlsOverlay)
+                        } else {
+                            PhotosPicker(selection: $selectedItem, matching: .images) {
+                                emptyStatePlaceholder
                             }
                         }
                     }
+                    .frame(width: 400, height: 400)
+                    .padding(.top, 10)
+                    .onChange(of: selectedItem) { _, newValue in
+                        handleImageSelection(newValue)
+                    }
 
-                    TextField("Say something about your fit...", text: $caption)
-                        .padding().background(Color.white.opacity(0.1)).cornerRadius(10)
-                        .foregroundColor(.white).padding(.horizontal)
+                    // Caption Field
+                    TextField(
+                        "",
+                        text: $caption,
+                        prompt: Text("Say something about your fit...").foregroundColor(.white.opacity(0.6)),
+                        axis: .vertical
+                    )
+                    .lineLimit(3, reservesSpace: true)
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
+                    .foregroundColor(.white)
+                    .padding(.horizontal)
+                    .padding(.top, 15)
 
+                    // Preview & Share Button
                     if isUploading {
                         ProgressView().tint(fitPickGold)
+                            .padding(.top, 20)
                     } else {
-                        Button(action: uploadPost) {
-                            Text("Share OOTD").font(.headline).foregroundColor(.black)
-                                .frame(maxWidth: .infinity).padding().background(fitPickGold).cornerRadius(10)
+                        Button(action: generatePreview) {
+                            Text("Preview & Share")
+                                .font(.headline)
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(postImage == nil || caption.isEmpty ? Color.gray : fitPickGold)
+                                .cornerRadius(10)
                         }
-                        .padding(.horizontal).disabled(postImage == nil || caption.isEmpty)
+                        .padding(.horizontal)
+                        .padding(.top, 20)
+                        .disabled(postImage == nil || caption.isEmpty)
                     }
+                    
                     Spacer()
                 }
-                .padding(.top)
             }
-            .navigationTitle("New Post")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: .principal) { Text("New Post").foregroundColor(.white) }
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }.foregroundColor(fitPickGold)
                 }
+            }
+            .sheet(isPresented: $showPreview) {
+                previewSheetContent
+            }
+        }
+    }
+}
+
+extension UploadPostView {
+    
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+    
+    private var controlsOverlay: some View {
+        VStack {
+            HStack {
+                Button(action: { postImage = nil; selectedItem = nil }) {
+                    Image(systemName: "xmark.circle.fill").background(Circle().fill(Color.black.opacity(0.5)))
+                }
+                Spacer()
+                Button(action: resetPosition) {
+                    Image(systemName: "arrow.counterclockwise.circle.fill").background(Circle().fill(Color.black.opacity(0.5)))
+                }
+            }
+            .padding(12).foregroundColor(fitPickGold).font(.title2)
+            Spacer()
+        }
+    }
+    
+    private var emptyStatePlaceholder: some View {
+        RoundedRectangle(cornerRadius: 15).fill(Color.white.opacity(0.1))
+            .frame(height: 400)
+            .overlay(VStack {
+                Image(systemName: "photo.on.rectangle.angled").font(.largeTitle)
+                Text("Upload your photo").font(.callout)
+            }.foregroundColor(fitPickGold))
+    }
+    
+    private var previewSheetContent: some View {
+        ZStack {
+            fitPickBlack.ignoresSafeArea()
+            VStack(spacing: 20) {
+                Text("Post Preview").font(.headline).foregroundColor(.white).padding(.top)
+                
+                if let rendered = finalRenderedImage {
+                    Image(uiImage: rendered)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 300, height: 300)
+                        .cornerRadius(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(fitPickGold, lineWidth: 1))
+                }
+                
+                ScrollView {
+                    Text(caption)
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxHeight: 100)
+                
+                Button(action: uploadPost) {
+                    Text("Confirm & Post").font(.headline).foregroundColor(.black)
+                        .frame(maxWidth: .infinity).padding().background(fitPickGold).cornerRadius(10)
+                }
+                .padding(.horizontal)
+                
+                Button("Go Back") { showPreview = false }.foregroundColor(fitPickGold)
+                Spacer()
+            }
+            .padding()
+        }
+        .presentationDetents([.medium])
+    }
+
+    func resetPosition() {
+        scale = 1.0; lastScale = 1.0; offset = .zero; lastOffset = .zero
+    }
+    
+    func handleImageSelection(_ item: PhotosPickerItem?) {
+        Task {
+            if let data = try? await item?.loadTransferable(type: Data.self) {
+                postImage = UIImage(data: data)
+                resetPosition()
             }
         }
     }
 
+    func generatePreview() {
+        let renderer = ImageRenderer(content: adjustedImageView)
+        renderer.scale = 3.0
+        if let image = renderer.uiImage {
+            self.finalRenderedImage = image
+            self.showPreview = true
+        }
+    }
+
     func uploadPost() {
-        guard let image = postImage, let email = session.email else { return }
+        guard let finalImg = finalRenderedImage, let email = session.email else { return }
+        showPreview = false
         isUploading = true
-        let storageManager = StorageManager()
         
-        storageManager.uploadSocial(email: email, ootd: image) { url in
+        guard let compressedData = finalImg.jpegData(compressionQuality: 0.7),
+              let readyImage = UIImage(data: compressedData) else { return }
+
+        let storageManager = StorageManager()
+        storageManager.uploadSocial(email: email, ootd: readyImage) { url in
             let db = Firestore.firestore()
             let uniqueID = "\(email)_\(Int(Date().timeIntervalSince1970))"
-            
             let data: [String: Any] = [
                 "id": uniqueID,
                 "userEmail": email,
@@ -96,7 +258,6 @@ struct UploadPostView: View {
                 "likedByNames": [],
                 "timestamp": FieldValue.serverTimestamp()
             ]
-            
             db.collection("socials").document(uniqueID).setData(data) { _ in
                 isUploading = false
                 dismiss()

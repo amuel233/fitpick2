@@ -165,6 +165,11 @@ struct BodyMeasurementView: View {
                                 return
                             }
                         
+                        // Capture the existing username from the manager before we overwrite it
+                        // This is required to find and remove the old name from 'likedByNames' arrays
+                        let oldUsername = firestoreManager.currentUserData?.username ?? ""
+                        let newUsername = username
+                        
                         let db = Firestore.firestore()
                         
                         //Save in Storage + Firestore
@@ -202,6 +207,15 @@ struct BodyMeasurementView: View {
                                     print("Error updating height: \(error.localizedDescription)")
                                 } else {
                                     print("Successfully updated height to \(height)!")
+                                    // Update Socials Collection if username changed
+                                    // This handles both posts authored and posts liked by the user
+                                    if oldUsername != newUsername && !oldUsername.isEmpty {
+                                        firestoreManager.updateUsernameEverywhere(
+                                            email: userEmail,
+                                            oldUsername: oldUsername,
+                                            newUsername: newUsername
+                                        )
+                                    }
                                 }
                             }
                         }
