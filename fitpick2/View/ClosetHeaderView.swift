@@ -1,67 +1,65 @@
+//
+//  ClosetHeaderView.swift
+//  fitpick
+//
+//  Created by Bryan Gavino on 1/20/26.
+//
+
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
 
 struct ClosetHeaderView: View {
-    // ViewModel for Avatar Generation (if needed)
+    // ViewModel for Avatar Generation
     @StateObject private var bodyVM = BodyMeasurementViewModel()
     @State private var avatarURL: String? = nil
     
-    // Bindings from Parent View
+    // Bindings
     @Binding var tryOnImage: UIImage?
     @Binding var tryOnMessage: String?
+    
+    // Save Logic
+    var onSave: (() -> Void)?
+    var isSaving: Bool = false
+    var isSaved: Bool = false
     
     private let db = Firestore.firestore()
     
     var body: some View {
-        VStack(spacing: 20) {
-            ZStack(alignment: .bottomTrailing) {
-                // IMAGE HOLDER
+        VStack(spacing: 15) {
+            // Button alignment: Top Right
+            ZStack(alignment: .topTrailing) {
+                
+                // --- IMAGE HOLDER ---
                 ZStack {
-                    // 1. Background Fill (prevents empty space looking weird)
                     Color.secondary.opacity(0.05)
                     
-                    // 2. Image Logic
                     if let tryOn = tryOnImage {
-                        // A. Show Generated Try-On Image (Full View)
                         Image(uiImage: tryOn)
                             .resizable()
-                            .scaledToFit() // Changed from .fill to .fit
-                            .padding(4)    // Add slight padding so it doesn't touch edges
+                            .scaledToFit()
+                            .padding(4)
                     } else if let message = tryOnMessage {
-                        // B. Show Error Message
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.orange)
-                            Text(message)
-                                .font(.caption)
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
+                                .font(.largeTitle).foregroundColor(.orange)
+                            Text(message).font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
                         }
+                        .padding()
                     } else if let urlString = avatarURL, let url = URL(string: urlString) {
-                        // C. Show Avatar (Full View)
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .success(let image):
-                                image.resizable()
-                                    .scaledToFill() // Changed from .fill to .fit
-                                    .padding(4)
-                            case .failure:
-                                defaultPlaceholder
-                            case .empty:
-                                ProgressView()
-                            @unknown default:
-                                defaultPlaceholder
+                                image.resizable().scaledToFill().padding(4)
+                            default: defaultPlaceholder
                             }
                         }
                     } else {
-                        // D. Placeholder
                         defaultPlaceholder
                     }
                 }
-                .frame(width: 360, height: 450) // Increased height slightly for full body
+                // CHANGED: Height reduced from 420 to 350
+                .frame(width: 340, height: 350)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -69,9 +67,34 @@ struct ClosetHeaderView: View {
                 )
                 .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 10)
                 
-                // FLOATING BUTTONS
+                // --- FLOATING BUTTONS (Top Right) ---
                 VStack(spacing: 12) {
-                    // Close/Clear Try-On Button
+                    
+                    // 1. SAVE BUTTON
+                    if tryOnImage != nil {
+                        Button(action: {
+                            if !isSaved { onSave?() }
+                        }) {
+                            Circle()
+                                .fill(isSaved ? Color.green : Color.white)
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Group {
+                                        if isSaving {
+                                            ProgressView()
+                                        } else if isSaved {
+                                            Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
+                                        } else {
+                                            Image(systemName: "arrow.down.to.line").font(.system(size: 16, weight: .bold)).foregroundColor(.primary)
+                                        }
+                                    }
+                                )
+                                .shadow(radius: 4)
+                        }
+                        .disabled(isSaving || isSaved)
+                    }
+                    
+                    // 2. CLOSE BUTTON
                     if tryOnImage != nil || tryOnMessage != nil {
                         Button(action: {
                             withAnimation {
@@ -79,37 +102,24 @@ struct ClosetHeaderView: View {
                                 tryOnMessage = nil
                             }
                         }) {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 44, height: 44)
-                                .overlay(
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.primary)
-                                )
+                            Circle().fill(.ultraThinMaterial).frame(width: 40, height: 40)
+                                .overlay(Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).foregroundColor(.primary))
                                 .shadow(radius: 4)
                         }
                     }
                     
-                    // Generate Avatar Button (Only if not trying on)
+                    // 3. GENERATE BUTTON
                     if tryOnImage == nil && tryOnMessage == nil {
                         Button(action: {
-                            Task {
-                                await bodyVM.generateAndSaveAvatar()
-                            }
+                            Task { await bodyVM.generateAndSaveAvatar() }
                         }) {
                             Circle()
                                 .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 44, height: 44)
+                                .frame(width: 40, height: 40)
                                 .overlay(
                                     Group {
-                                        if bodyVM.isGenerating {
-                                            ProgressView().tint(.white)
-                                        } else {
-                                            Image(systemName: "sparkles")
-                                                .font(.system(size: 18, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
+                                        if bodyVM.isGenerating { ProgressView().tint(.white) }
+                                        else { Image(systemName: "sparkles").font(.system(size: 16, weight: .bold)).foregroundColor(.white) }
                                     }
                                 )
                                 .shadow(radius: 4)
@@ -117,33 +127,19 @@ struct ClosetHeaderView: View {
                         .disabled(bodyVM.isGenerating)
                     }
                 }
-                .offset(x: 10, y: 10)
+                .padding(12)
             }
             .padding(.top, 10)
-            
-            // CAPTION
-            VStack(spacing: 4) {
-                Text(tryOnImage != nil ? "Virtual Try-On" : "Virtual Mirror")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                Text(tryOnImage != nil ? "Generated with Gemini AI" : "Generated from your body specs")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 30)
-        .onAppear {
-            fetchAvatarURL()
-        }
+        .padding(.vertical, 10)
+        .onAppear { fetchAvatarURL() }
     }
     
     private var defaultPlaceholder: some View {
         VStack(spacing: 12) {
-            Image(systemName: "figure.arms.open")
-                .font(.system(size: 60))
-            Text("No Avatar Yet")
-                .font(.caption)
+            Image(systemName: "figure.arms.open").font(.system(size: 60))
+            Text("No Avatar Yet").font(.caption)
         }
         .foregroundColor(.gray.opacity(0.6))
     }
