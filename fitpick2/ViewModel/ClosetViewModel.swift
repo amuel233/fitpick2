@@ -408,4 +408,36 @@ class ClosetViewModel: ObservableObject {
             }
         }
     }
+    
+    func fetchClothes(for email: String) {
+        self.clothingItems = [] // Clear current list to show loading state
+        
+        // Using "ownerEmail" to match the key used in startFirestoreListener and uploadAndCategorize
+        db.collection("clothes")
+            .whereField("ownerEmail", isEqualTo: email)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("Error fetching peer's clothes: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                // Perform the update on the main thread since clothingItems is @Published
+                DispatchQueue.main.async {
+                    self?.clothingItems = documents.compactMap { doc -> ClothingItem? in
+                        let data = doc.data()
+                        
+                        return ClothingItem(
+                            id: doc.documentID,
+                            image: Image(systemName: "photo"),
+                            uiImage: nil,
+                            category: ClothingCategory(rawValue: data["category"] as? String ?? "") ?? .top,
+                            subCategory: data["subcategory"] as? String ?? "Other",
+                            remoteURL: data["imageURL"] as? String ?? ""
+                        )
+                    }
+                }
+            }
+    }
 }
