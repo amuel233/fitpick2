@@ -18,20 +18,33 @@ struct SocialPostCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             // --- HEADER ---
             HStack {
-                Text(post.username)
-                    .font(.headline)
-                    .foregroundColor(goldColor)
+                let myEmail = firestoreManager.currentEmail ?? ""
+                let targetEmail = post.userEmail
+                // Logic: Access if I am following them OR if it is my own post
+                let isFollowing = firestoreManager.currentUserData?.following.contains(targetEmail) ?? false
+                let isMe = (myEmail == targetEmail)
+                
+                if isFollowing || !isMe {
+//                    NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
+                        Text(post.username)
+                            .font(.headline)
+                            .foregroundColor(goldColor)
+//                    }
+//                    .buttonStyle(PlainButtonStyle())
+                } else {
+                    // Disabled state for non-followers
+                    Text(post.username)
+                        .font(.headline)
+                        .foregroundColor(goldColor.opacity(0.5))
+                }
                 
                 Spacer()
                 
-                if let myEmail = firestoreManager.currentEmail, post.userEmail != myEmail {
-                    let isFollowing = firestoreManager.currentUserData?.following.contains(post.userEmail) ?? false
-                    
+                if !isMe {
                     Button(action: {
-                        print("Follow button tapped for \(post.userEmail)")
                         firestoreManager.toggleFollow(
                             currentEmail: myEmail,
-                            targetEmail: post.userEmail,
+                            targetEmail: targetEmail,
                             isFollowing: isFollowing
                         )
                     }) {
@@ -44,8 +57,6 @@ struct SocialPostCardView: View {
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(goldColor, lineWidth: isFollowing ? 1 : 0))
                             .cornerRadius(6)
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .contentShape(Rectangle())
                 }
             }
             .padding(.horizontal)
