@@ -37,10 +37,10 @@ struct ClosetView: View {
     
     // Snap Points
     private var maxOpenOffset: CGFloat { screenHeight * 0.12 }      // Top (Full Closet)
-    private var midOffset: CGFloat { screenHeight * 0.47 }          // Mid (Half/Half - Shows Full Header Image)
+    private var midOffset: CGFloat { screenHeight * 0.48 }          // Mid (Half/Half)
 
     // State: Initialize to MID Offset
-    @State private var currentDrawerOffset: CGFloat = UIScreen.main.bounds.height * 0.47
+    @State private var currentDrawerOffset: CGFloat = UIScreen.main.bounds.height * 0.48
     @State private var dragOffset: CGFloat = 0
     
     var body: some View {
@@ -63,23 +63,19 @@ struct ClosetView: View {
                 
                 // MARK: LAYER 2 - Draggable Wardrobe Drawer
                 VStack(spacing: 0) {
-                    // 1. Grabber Handle
-                    ZStack {
-                        Color.white // Touch target
-                        Capsule()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 40, height: 5)
-                            .padding(.vertical, 12)
-                    }
-                    .frame(height: 30)
-                    .gesture(
-                        DragGesture()
-                            .onChanged(handleDragChanged)
-                            .onEnded(handleDragEnded)
-                    )
                     
-                    // 2. Content Container
+                    // --- DRAGGABLE HEADER START ---
                     VStack(spacing: 0) {
+                        // 1. Grabber Handle
+                        ZStack {
+                            Capsule()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 40, height: 5)
+                                .padding(.vertical, 12)
+                        }
+                        .frame(height: 30)
+                        
+                        // 2. Action Buttons
                         ClosetActionButtons(
                             viewModel: viewModel,
                             selectedItemIDs: selectedItemIDs,
@@ -94,24 +90,34 @@ struct ClosetView: View {
                         )
                         .padding(.bottom, 10)
                         
+                        // 3. Filters
                         ClosetFilterView(selectedCategory: $selectedCategoryFilter)
                             .padding(.bottom, 10)
-                        
-                        ScrollView {
-                            InventoryGrid(
-                                viewModel: viewModel,
-                                selectedItemIDs: $selectedItemIDs,
-                                itemToDelete: $itemToDelete,
-                                showingDeleteAlert: $showingDeleteAlert,
-                                selectedCategory: selectedCategoryFilter,
-                                zoomedItem: $zoomedItem
-                            )
-                            // Massive padding to ensure Delete button clears menus
-                            .padding(.bottom, 250)
-                        }
-                        // Disable scroll if drawer is closed to avoid conflict
-                        .scrollDisabled(currentDrawerOffset > maxOpenOffset + 50)
                     }
+                    .background(Color.white) // Important: Makes the whitespace draggable
+                    // ATTACH GESTURE TO THE WHOLE HEADER (Fixes "glitchy" feeling)
+                    .gesture(
+                        DragGesture()
+                            .onChanged(handleDragChanged)
+                            .onEnded(handleDragEnded)
+                    )
+                    // --- DRAGGABLE HEADER END ---
+                    
+                    // 4. Scrollable Grid (Independent)
+                    ScrollView {
+                        InventoryGrid(
+                            viewModel: viewModel,
+                            selectedItemIDs: $selectedItemIDs,
+                            itemToDelete: $itemToDelete,
+                            showingDeleteAlert: $showingDeleteAlert,
+                            selectedCategory: selectedCategoryFilter,
+                            zoomedItem: $zoomedItem
+                        )
+                        // Massive padding to ensure Delete button clears menus
+                        .padding(.bottom, 250)
+                    }
+                    // Prevent scrolling conflict when drawer is closed/mid
+                    .scrollDisabled(currentDrawerOffset > midOffset + 50)
                 }
                 .background(Color.white)
                 .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
@@ -274,19 +280,59 @@ struct InventoryItemCard: View {
     let item: ClothingItem; let isSelected: Bool; let onTap: () -> Void; let onDelete: () -> Void; let onLongPress: () -> Void
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            KFImage(URL(string: item.remoteURL)).placeholder { Color.gray.opacity(0.1) }
-                .cacheOriginalImage().resizable().scaledToFill().frame(height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: 16)).contentShape(Rectangle())
-                .onTapGesture(perform: onTap).onLongPressGesture(perform: onLongPress)
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(isSelected ? Color.blue : Color.clear, lineWidth: 3))
+            // 1. Image Layer
+            KFImage(URL(string: item.remoteURL))
+                .placeholder { Color.gray.opacity(0.1) }
+                .cacheOriginalImage()
+                .resizable()
+                .scaledToFill()
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(height: 140)
+                .clipped() // FIX: Prevents overlap by hard clipping bounds
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .onLongPressGesture(perform: onLongPress)
             
-            if isSelected { Image(systemName: "checkmark.circle.fill").font(.title3).foregroundColor(.blue).background(Circle().fill(.white)).padding(4) }
-            if !item.size.isEmpty { Text(item.size).font(.caption2.bold()).padding(4).background(.ultraThinMaterial).clipShape(Capsule()).padding([.top, .leading], 4).frame(maxWidth: .infinity, alignment: .topLeading) }
+            // 2. Selection Border
+            if isSelected {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.blue, lineWidth: 3)
+                    .frame(height: 140)
+            }
             
+            // 3. Selection Icon
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+                    .background(Circle().fill(.white))
+                    .padding(4)
+            }
+            
+            // 4. Size Tag
+            if !item.size.isEmpty {
+                Text(item.size)
+                    .font(.caption2.bold())
+                    .padding(4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding([.top, .leading], 4)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            
+            // 5. Delete Button
             if !isSelected {
                 Button(action: onDelete) {
-                    Image(systemName: "xmark").font(.caption).foregroundColor(.white).padding(6).background(Color.black.opacity(0.4)).clipShape(Circle())
-                }.padding(6).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Color.black.opacity(0.4))
+                        .clipShape(Circle())
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: 140, alignment: .bottomTrailing)
             }
         }
     }
