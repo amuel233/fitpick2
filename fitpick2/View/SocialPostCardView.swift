@@ -25,12 +25,12 @@ struct SocialPostCardView: View {
                 let isMe = (myEmail == targetEmail)
                 
                 if isFollowing || !isMe {
-//                    NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
+                    NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
                         Text(post.username)
                             .font(.headline)
                             .foregroundColor(goldColor)
-//                    }
-//                    .buttonStyle(PlainButtonStyle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 } else {
                     // Disabled state for non-followers
                     Text(post.username)

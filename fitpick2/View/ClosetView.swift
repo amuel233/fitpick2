@@ -43,6 +43,11 @@ struct ClosetView: View {
     @State private var currentDrawerOffset: CGFloat = UIScreen.main.bounds.height * 0.48
     @State private var dragOffset: CGFloat = 0
     
+    // Navigation from Socials
+    var targetUserEmail: String? = nil
+    var targetUsername: String? = nil
+    let fitPickGold = Color("fitPickGold")
+    
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -57,7 +62,7 @@ struct ClosetView: View {
                         isSaved: viewModel.tryOnSavedSuccess
                     )
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 60) // Push down from top edge
+                    .padding(.top, targetUserEmail != nil ? 30 : 60) // Push down from top edge
                 }
                 .background(Color(uiColor: .systemGroupedBackground))
                 
@@ -75,7 +80,7 @@ struct ClosetView: View {
                         }
                         .frame(height: 30)
                         
-                        // 2. Action Buttons
+                        // 2. Action Buttons (Modified for Guest Logic)
                         ClosetActionButtons(
                             viewModel: viewModel,
                             selectedItemIDs: selectedItemIDs,
@@ -86,7 +91,8 @@ struct ClosetView: View {
                                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                                     currentDrawerOffset = midOffset
                                 }
-                            }
+                            },
+                            isGuest: targetUserEmail != nil
                         )
                         .padding(.bottom, 10)
                         
@@ -111,7 +117,8 @@ struct ClosetView: View {
                             itemToDelete: $itemToDelete,
                             showingDeleteAlert: $showingDeleteAlert,
                             selectedCategory: selectedCategoryFilter,
-                            zoomedItem: $zoomedItem
+                            zoomedItem: $zoomedItem,
+                            isOwner: targetUserEmail == nil
                         )
                         // Massive padding to ensure Delete button clears menus
                         .padding(.bottom, 250)
@@ -134,14 +141,29 @@ struct ClosetView: View {
                         onSaveSize: { newSize in
                             viewModel.updateItemSize(item, newSize: newSize)
                             var updated = item; updated.size = newSize; zoomedItem = updated
-                        }
+                        },
+                        isOwner: targetUserEmail == nil
                     )
                     .zIndex(2)
                 }
             }
-            .navigationTitle("Closet")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { viewModel.fetchUserGender() }
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(targetUserEmail == nil ? "Closet" : "  \(targetUsername ?? "User")'s Closet")
+                        .font(.system(size: 25, weight: .bold, design: .rounded))
+                        .foregroundColor(targetUserEmail != nil ? .fitPickGold : .primary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .onAppear {
+                if let email = targetUserEmail {
+                    print("Guest Mode: Loading clothes for \(email)")
+                    viewModel.fetchClothes(for: email)
+                } else {
+                    viewModel.fetchUserGender()
+                }
+            }
             
             // MARK: - Sheets
             
@@ -255,6 +277,7 @@ struct InventoryGrid: View {
     @Binding var showingDeleteAlert: Bool
     var selectedCategory: ClothingCategory?
     @Binding var zoomedItem: ClothingItem?
+    let isOwner: Bool
     
     let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     
@@ -266,6 +289,7 @@ struct InventoryGrid: View {
                 ForEach(items) { item in
                     InventoryItemCard(
                         item: item, isSelected: selectedItemIDs.contains(item.id),
+                        isOwner: isOwner,
                         onTap: { if selectedItemIDs.contains(item.id) { selectedItemIDs.remove(item.id) } else { selectedItemIDs.insert(item.id) } },
                         onDelete: { itemToDelete = item; showingDeleteAlert = true },
                         onLongPress: { let g = UIImpactFeedbackGenerator(style: .medium); g.impactOccurred(); withAnimation { zoomedItem = item } }
@@ -277,7 +301,7 @@ struct InventoryGrid: View {
 }
 
 struct InventoryItemCard: View {
-    let item: ClothingItem; let isSelected: Bool; let onTap: () -> Void; let onDelete: () -> Void; let onLongPress: () -> Void
+    let item: ClothingItem; let isSelected: Bool; let isOwner: Bool; let onTap: () -> Void; let onDelete: () -> Void; let onLongPress: () -> Void
     var body: some View {
         ZStack(alignment: .topTrailing) {
             // 1. Image Layer
@@ -321,8 +345,8 @@ struct InventoryItemCard: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             
-            // 5. Delete Button
-            if !isSelected {
+            // 5. Delete Button (Hidden for Guests)
+            if isOwner && !isSelected {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
                         .font(.caption)
@@ -339,7 +363,7 @@ struct InventoryItemCard: View {
 }
 
 struct ZoomOverlayView: View {
-    let item: ClothingItem; let onDismiss: () -> Void; let onSaveSize: (String) -> Void
+    let item: ClothingItem; let onDismiss: () -> Void; let onSaveSize: (String) -> Void; let isOwner: Bool
     @State private var isEditing = false; @State private var editedSize: String = ""
     var body: some View {
         ZStack {
@@ -350,7 +374,10 @@ struct ZoomOverlayView: View {
                     Text(item.subCategory).font(.title2.bold()).foregroundColor(.white)
                     HStack {
                         Text(item.size.isEmpty ? "No Size" : "Size: \(item.size)").font(.headline).foregroundColor(.gray)
-                        Button(action: { editedSize = item.size; isEditing = true }) { Image(systemName: "pencil.circle.fill").font(.title3).foregroundColor(.blue).background(Circle().fill(.white)) }
+                        // Only show edit button for owners
+                        if isOwner {
+                            Button(action: { editedSize = item.size; isEditing = true }) { Image(systemName: "pencil.circle.fill").font(.title3).foregroundColor(.blue).background(Circle().fill(.white)) }
+                        }
                     }
                 }
             }
@@ -371,10 +398,13 @@ struct ClosetActionButtons: View {
     
     // Actions
     var onTryOn: () -> Void
+    
+    // Guest
+    let isGuest: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            // 1. Try On Button
+            // 1. Try On Button (Expands if Guest)
             Button(action: {
                 onTryOn()
                 Task { await viewModel.generateVirtualTryOn(selectedItemIDs: selectedItemIDs) }
@@ -389,15 +419,18 @@ struct ClosetActionButtons: View {
                 .foregroundColor(.white).cornerRadius(16)
             }.disabled(selectedItemIDs.isEmpty || viewModel.isGeneratingTryOn)
 
-            // 2. Camera Button (Smart LiDAR Scan)
-            Button(action: { showSmartScan = true }) {
-                Image(systemName: "camera.fill").font(.title3).frame(width: 50, height: 50).background(Color.white).foregroundColor(.blue).cornerRadius(16).shadow(radius: 2)
-            }.disabled(viewModel.isUploading)
-            
-            // 3. Gallery Button (Manual Add)
-            PhotosPicker(selection: $photoSelection, matching: .images) {
-                Image(systemName: "photo.on.rectangle").font(.title3).frame(width: 50, height: 50).background(Color.white).foregroundColor(.blue).cornerRadius(16).shadow(radius: 2)
-            }.disabled(viewModel.isUploading)
+            // 2. Add Buttons (Hidden for Guests)
+            if !isGuest {
+                // Camera Button (Smart LiDAR Scan)
+                Button(action: { showSmartScan = true }) {
+                    Image(systemName: "camera.fill").font(.title3).frame(width: 50, height: 50).background(Color.white).foregroundColor(.blue).cornerRadius(16).shadow(radius: 2)
+                }.disabled(viewModel.isUploading)
+                
+                // Gallery Button (Manual Add)
+                PhotosPicker(selection: $photoSelection, matching: .images) {
+                    Image(systemName: "photo.on.rectangle").font(.title3).frame(width: 50, height: 50).background(Color.white).foregroundColor(.blue).cornerRadius(16).shadow(radius: 2)
+                }.disabled(viewModel.isUploading)
+            }
             
         }.padding(.horizontal, 16)
     }
