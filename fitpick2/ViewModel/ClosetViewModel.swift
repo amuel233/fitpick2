@@ -255,13 +255,18 @@ class ClosetViewModel: ObservableObject {
             currentItemsUsed = Array(selectedItemIDs)
         }
         
-        guard let userEmail = Auth.auth().currentUser?.email else { return }
+        // ALWAYS pull the avatar for the person currently holding the phone
+        guard let currentUserEmail = Auth.auth().currentUser?.email else { return }
         
         do {
-            let userDoc = try await db.collection("users").document(userEmail).getDocument()
+            // Fetch the LOGGED-IN user's avatar, regardless of whose closet we are in
+            let userDoc = try await db.collection("users").document(currentUserEmail).getDocument()
             guard let avatarURLString = userDoc.data()?["avatarURL"] as? String,
                   let avatarURL = URL(string: avatarURLString) else {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please generate an avatar first." }
+                await MainActor.run {
+                    isGeneratingTryOn = false
+                    tryOnMessage = "Please generate your own avatar in your closet first."
+                }
                 return
             }
             
