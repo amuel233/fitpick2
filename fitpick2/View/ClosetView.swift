@@ -56,10 +56,11 @@ struct ClosetView: View {
                 VStack {
                     ClosetHeaderView(
                         tryOnImage: $viewModel.generatedTryOnImage,
-                        tryOnMessage: $viewModel.tryOnMessage,
-                        onSave: { Task { await viewModel.saveCurrentLook() } },
-                        isSaving: viewModel.isSavingTryOn,
-                        isSaved: viewModel.tryOnSavedSuccess
+                            tryOnMessage: $viewModel.tryOnMessage,
+                            onSave: { Task { await viewModel.saveCurrentLook() } },
+                            isSaving: viewModel.isSavingTryOn,
+                            isSaved: viewModel.tryOnSavedSuccess,
+                            isGuest: targetUserEmail != nil // True if viewing someone else's closet
                     )
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, targetUserEmail != nil ? 30 : 60) // Push down from top edge
@@ -335,8 +336,8 @@ struct InventoryItemCard: View {
             }
             
             // 4. Size Tag
-            if !item.size.isEmpty {
-                Text(item.size)
+            if !item.size.isEmpty || !isOwner {
+                Text(item.size.isEmpty ? "Unknown" : item.size)
                     .font(.caption2.bold())
                     .padding(4)
                     .background(.ultraThinMaterial)
@@ -363,27 +364,75 @@ struct InventoryItemCard: View {
 }
 
 struct ZoomOverlayView: View {
-    let item: ClothingItem; let onDismiss: () -> Void; let onSaveSize: (String) -> Void; let isOwner: Bool
-    @State private var isEditing = false; @State private var editedSize: String = ""
+    let item: ClothingItem
+    let onDismiss: () -> Void
+    let onSaveSize: (String) -> Void
+    let isOwner: Bool
+    
+    @State private var isEditing = false
+    @State private var editedSize: String = ""
+    
     var body: some View {
         ZStack {
             Color.black.opacity(0.9).ignoresSafeArea().onTapGesture(perform: onDismiss)
+            
             VStack(spacing: 20) {
-                KFImage(URL(string: item.remoteURL)).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: 12)).padding()
-                VStack {
-                    Text(item.subCategory).font(.title2.bold()).foregroundColor(.white)
-                    HStack {
-                        Text(item.size.isEmpty ? "No Size" : "Size: \(item.size)").font(.headline).foregroundColor(.gray)
-                        // Only show edit button for owners
+                KFImage(URL(string: item.remoteURL))
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding()
+                
+                VStack(spacing: 8) {
+                    Text(item.subCategory)
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                    
+                    HStack(spacing: 10) {
+                        // The size is always displayed here
+                        Text(item.size.isEmpty ? "No Size" : "Size: \(item.size)")
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                        
+                        // Only show the interactive edit button for owners
                         if isOwner {
-                            Button(action: { editedSize = item.size; isEditing = true }) { Image(systemName: "pencil.circle.fill").font(.title3).foregroundColor(.blue).background(Circle().fill(.white)) }
+                            Button(action: {
+                                editedSize = item.size
+                                isEditing = true
+                            }) {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                                    .background(Circle().fill(.white))
+                            }
                         }
                     }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 12)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
                 }
             }
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark.circle.fill").font(.largeTitle).foregroundColor(.white).padding() } }; Spacer() }
+            
+            // Close Button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                            .padding()
+                    }
+                }
+                Spacer()
+            }
         }
-        .alert("Edit Size", isPresented: $isEditing) { TextField("Size", text: $editedSize); Button("Save") { onSaveSize(editedSize) }; Button("Cancel", role: .cancel) {} }
+        .alert("Edit Size", isPresented: $isEditing) {
+            TextField("Size", text: $editedSize)
+            Button("Save") { onSaveSize(editedSize) }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }
 
