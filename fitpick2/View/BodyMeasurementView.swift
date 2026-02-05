@@ -12,240 +12,184 @@ import FirebaseFirestore
 import GoogleSignIn
 
 struct BodyMeasurementView: View {
-
-    @State private var username: String = ""
-    @State private var gender: String = "Male"
-    @State private var showAutoMeasure = false // 1. State to control the view
-    
-    @EnvironmentObject var session: UserSession
-    
-    @State private var height: Double = 0 //ok
-    @State private var bodyWeight: Double = 0 //ok
-    @State private var chest: Double = 0
-    @State private var shoulderWidth: Double = 0
-    @State private var armLength: Double = 0 //ok
-    @State private var waist: Double = 0 //ok
-    @State private var hips: Double = 0
-    @State private var inseam: Double = 0 //ok
-    @State private var shoeSize: Double = 0 //ok
-    
+    @StateObject private var viewModel = BodyMeasurementViewModel()
+    @State private var showAutoMeasure = false
     @State private var showImagePicker = false
     @State private var selectedSelfie: UIImage? = nil
     
+    @EnvironmentObject var session: UserSession
     @StateObject private var firestoreManager = FirestoreManager()
     @StateObject private var storageManager = StorageManager()
     
-    // Brand Colors
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("User Information")
-                        .font(.system(size: 34, weight: .bold))
-                        .padding(.top, 10)
-
-                    TextField("Username", text: $username)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-                    
-                    Picker("Gender", selection: $gender) {
-                        Text("Male").tag("Male")
-                        Text("Female").tag("Female")
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        showAutoMeasure = true // 3. Trigger the action
-                    }) {
-                        Text("Auto-Measure")
-                            .fontWeight(.semibold)
-                            .frame(minWidth: 120)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .fullScreenCover(isPresented: $showAutoMeasure) {
- 
-                    AutoMeasureView(onCapture: { h, w, i, a, s, c, hi in
-                            self.height = h
-                            self.waist = w
-                            self.inseam = i
-                            self.armLength = a
-                            self.shoulderWidth = s
-                            self.chest = c
-                            self.hips = hi
+            // Using GeometryReader to calculate relative positions for measurement lines
+            GeometryReader { geo in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
                         
-                            showAutoMeasure = false
-                        })
-                }
-
-                ZStack {
-                    Image(gender)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: .infinity)
-                        .padding(.vertical, 40)
-                        .opacity(0.8)
-                    
-                    MeasurementLine(label: "Height", value: $height, unit: "cm", isVertical: true)
-                        .frame(height: 380)
-                        .offset(x: -165, y: -17)
-
-                    MeasurementLine(label: "Arm", value: $armLength, unit: "cm", isVertical: true)
-                        .frame(height: 160)
-                        .offset(x: -70, y: -70)
-
-                    MeasurementLine(label: "Inseam", value: $inseam, unit: "cm", isVertical: true)
-                        .frame(height: 190)
-                        .offset(x: 0, y: 80)
-
-                    MeasurementLine(label: "Shoulder", value: $shoulderWidth, unit: "cm", isVertical: false)
-                        .frame(width: 100)
-                        .offset(y: -130)
-                    
-                    MeasurementLine(label: "Chest", value: $chest, unit: "cm", isVertical: false)
-                        .frame(width: 60)
-                        .offset(y: -100)
-                    
-                    MeasurementLine(label: "Waist", value: $waist, unit: "cm", isVertical: false)
-                        .frame(width: 50)
-                        .offset(y: -65)
-
-                    MeasurementLine(label: "Hips", value: $hips, unit: "cm", isVertical: false)
-                        .frame(width: 75)
-                        .offset(y: -30)
-
-                    VStack {
-                        Spacer()
-                        HStack {
-                            StatBox(label: "Body", value: $bodyWeight, unit: "kg")
-                            Spacer()
-                            StatBox(label: "Shoe Size", value: $shoeSize, unit: "")
-                        }
-                        .padding(.horizontal, 30)
-                        .padding(.bottom, 15)
-                    }
-                }
-                
-                VStack(spacing: 12) {
-                    //Updated Selfie
-                    Button(action: {
-                        print("Selfie tapped")
-                        showImagePicker = true
-                    }) {
-                        Text(selectedSelfie == nil ? "Take Selfie" : "Retake Selfie")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(fitPickGold)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(fitPickGold.opacity(0.1))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
-                            .cornerRadius(12)
-                    }
-                    .sheet(isPresented: $showImagePicker) {
-                        FaceCaptureView(selectedImage: $selectedSelfie)
-                    }
-                    
-                    Button(action: {
-                        print("Saved Profile for: \(username)")
-                        guard let userEmail = session.email, !userEmail.isEmpty else {
-                                print("Save Failed: session.email is nil")
-                                return
+                        // --- 1. User Info Header ---
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("User Information")
+                                .font(.system(size: 34, weight: .bold))
+                                .padding(.top, 10)
+                            
+                            TextField("Username", text: $viewModel.username)
+                                .padding()
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(12)
+                            
+                            Picker("Gender", selection: $viewModel.gender) {
+                                Text("Male").tag("Male")
+                                Text("Female").tag("Female")
                             }
-                        
-                        // Capture the existing username from the manager before we overwrite it
-                        // This is required to find and remove the old name from 'likedByNames' arrays
-                        let oldUsername = firestoreManager.currentUserData?.username ?? ""
-                        let newUsername = username
-                        
-                        let db = Firestore.firestore()
-                        
-                        //Save in Storage + Firestore
-                        if let selfie = selectedSelfie {
-                            //Update Storage path
-                            storageManager.uploadSelfie(email: userEmail, selfie: selfie) { downloadURL in
-                                if let userEmail = session.email {
-                                    print("Current user email: \(session.email ?? "No email found")")
-                                    let userRef = db.collection("users").document(userEmail)
-                                    userRef.updateData([
-                                        "selfie": downloadURL
-                                    ])
+                            .pickerStyle(.segmented)
+                            
+                            // CENTERED AUTO-MEASURE BUTTON
+                            HStack {
+                                Spacer()
+                                Button(action: { showAutoMeasure = true }) {
+                                    Text("Auto-Measure")
+                                        .fontWeight(.semibold)
+                                        .frame(minWidth: 140)
+                                        .padding(.vertical, 12)
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
                                 }
+                                Spacer()
                             }
                         }
-                        
-                        if let userEmail = session.email {
-                            print("Current user email: \(session.email ?? "No email found")")
-                            let userRef = db.collection("users").document(userEmail)
-                            userRef.updateData([
-                                "gender": gender,
-                                "username": username,
-                                "measurements.height": height,
-                                "measurements.bodyWeight": bodyWeight,
-                                "measurements.chest": chest,
-                                "measurements.shoulderWidth": shoulderWidth,
-                                "measurements.armLength": armLength,
-                                "measurements.waist": waist,
-                                "measurements.hips": hips,
-                                "measurements.inseam": inseam,
-                                "measurements.shoeSize": shoeSize,
-                            ])
-                            { error in
-                                if let error = error {
-                                    print("Error updating height: \(error.localizedDescription)")
-                                } else {
-                                    print("Successfully updated height to \(height)!")
-                                    // Update Socials Collection if username changed
-                                    // This handles both posts authored and posts liked by the user
-                                    if oldUsername != newUsername && !oldUsername.isEmpty {
-                                        firestoreManager.updateUsernameEverywhere(
-                                            email: userEmail,
-                                            oldUsername: oldUsername,
-                                            newUsername: newUsername
-                                        )
-                                    }
-                                }
-                            }
+                        .padding(.horizontal)
+
+                        // --- 2. Body Visualizer ---
+                        // We use a ZStack with a responsive frame based on device width
+                        ZStack {
+                            Image(viewModel.gender)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: geo.size.height * 0.5) // 50% of screen height
+                                .opacity(0.8)
+                                .padding(.vertical, 20)
+                            
+                            // Positioning lines relative to the image size
+                            // Note: Adjusted offsets to be more standard across screens
+                            MeasurementLine(label: "Height", value: $viewModel.height, unit: "cm", isVertical: true)
+                                .frame(height: geo.size.height * 0.35).offset(x: -geo.size.width * 0.4, y: -10)
+                            
+                            MeasurementLine(label: "Arm", value: $viewModel.armLength, unit: "cm", isVertical: true)
+                                .frame(height: 140).offset(x: -70, y: -60)
+                            
+                            MeasurementLine(label: "Inseam", value: $viewModel.inseam, unit: "cm", isVertical: true)
+                                .frame(height: 160).offset(x: 0, y: 80)
+                            
+                            MeasurementLine(label: "Shoulder", value: $viewModel.shoulderWidth, unit: "cm", isVertical: false)
+                                .frame(width: 100).offset(y: -130)
+                            
+                            MeasurementLine(label: "Chest", value: $viewModel.chest, unit: "cm", isVertical: false)
+                                .frame(width: 60).offset(y: -95)
+                            
+                            MeasurementLine(label: "Waist", value: $viewModel.waist, unit: "cm", isVertical: false)
+                                .frame(width: 50).offset(y: -60)
+                            
+                            MeasurementLine(label: "Hips", value: $viewModel.hips, unit: "cm", isVertical: false)
+                                .frame(width: 75).offset(y: -25)
                         }
-                                        
                         
-                    }) {
-                        Text("Save")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(username.isEmpty ? Color.gray.opacity(0.5) : Color.black)
-                            .foregroundColor(.white)
-                            .cornerRadius(15)
+                        // --- 3. Stat Boxes (Weight & Shoes) ---
+                        HStack(spacing: 20) {
+                            StatBox(label: "Body", value: $viewModel.bodyWeight, unit: "kg")
+                            StatBox(label: "Shoe Size", value: $viewModel.shoeSize, unit: "")
+                        }
+                        .padding(.horizontal)
+
+                        // --- 4. Action Buttons ---
+                        VStack(spacing: 12) {
+                            Button(action: { showImagePicker = true }) {
+                                Text(selectedSelfie == nil ? "Take Selfie" : "Retake Selfie")
+                                    .font(.subheadline).fontWeight(.bold)
+                                    .foregroundColor(fitPickGold)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                    .background(fitPickGold.opacity(0.1))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
+                                    .cornerRadius(12)
+                            }
+                            
+                            Button(action: { saveProfile() }) {
+                                Text("Save")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 16)
+                                    .background(viewModel.username.isEmpty ? Color.gray.opacity(0.5) : Color.black)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(15)
+                            }
+                            .disabled(viewModel.username.isEmpty)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 30) // Extra padding so it doesn't hit the bottom bar
                     }
-                    .disabled(username.isEmpty)
                 }
-                .padding(.horizontal)
-                .padding(.vertical)
-                .padding(.bottom, 20)
             }
+        }
+        .onAppear { viewModel.fetchUserData() }
+        .fullScreenCover(isPresented: $showAutoMeasure) {
+            AutoMeasureView(onCapture: { h, w, i, a, s, c, hi in
+                viewModel.height = h
+                viewModel.waist = w
+                viewModel.inseam = i
+                viewModel.armLength = a
+                viewModel.shoulderWidth = s
+                viewModel.chest = c
+                viewModel.hips = hi
+                showAutoMeasure = false
+            })
+        }
+        .sheet(isPresented: $showImagePicker) {
+            FaceCaptureView(selectedImage: $selectedSelfie)
+        }
+    }
+    
+    
+    private func saveProfile() {
+        guard let userEmail = session.email, !userEmail.isEmpty else { return }
+        let oldUsername = firestoreManager.currentUserData?.username ?? ""
+        let db = Firestore.firestore()
+        
+        if let selfie = selectedSelfie {
+            storageManager.uploadSelfie(email: userEmail, selfie: selfie) { url in
+                db.collection("users").document(userEmail).updateData(["selfie": url])
+            }
+        }
+        
+        db.collection("users").document(userEmail).updateData([
+            "gender": viewModel.gender,
+            "username": viewModel.username,
+            "measurements.height": viewModel.height,
+            "measurements.bodyWeight": viewModel.bodyWeight,
+            "measurements.chest": viewModel.chest,
+            "measurements.shoulderWidth": viewModel.shoulderWidth,
+            "measurements.armLength": viewModel.armLength,
+            "measurements.waist": viewModel.waist,
+            "measurements.hips": viewModel.hips,
+            "measurements.inseam": viewModel.inseam,
+            "measurements.shoeSize": viewModel.shoeSize,
+        ]) { _ in
+            if oldUsername != viewModel.username && !oldUsername.isEmpty {
+                firestoreManager.updateUsernameEverywhere(email: userEmail, oldUsername: oldUsername, newUsername: viewModel.username)
+            }
+            Task { await viewModel.generateAndSaveAvatar() }
         }
     }
 }
-
+// MARK: - Subcomponents (The ones that were missing)
 struct MeasurementLine: View {
     let label: String
     @Binding var value: Double
     let unit: String
     let isVertical: Bool
-
     var body: some View {
         VStack(spacing: 4) {
             Menu {
@@ -259,11 +203,8 @@ struct MeasurementLine: View {
                     Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).textCase(.uppercase)
                     Text("\(Int(value))").font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
                 }
-                .padding(4)
-                .background(Color.white.opacity(0.9))
-                .cornerRadius(6)
+                .padding(4).background(Color.white.opacity(0.9)).cornerRadius(6)
             }
-
             if isVertical {
                 VStack(spacing: 0) {
                     Rectangle().frame(width: 8, height: 1.5)
@@ -282,7 +223,6 @@ struct MeasurementLine: View {
         }
     }
 }
-
 struct StatBox: View {
     let label: String
     @Binding var value: Double
@@ -300,57 +240,16 @@ struct StatBox: View {
                 Text(label).font(.caption2).bold().foregroundColor(.secondary)
                 Text("\(Int(value))\(unit)").font(.subheadline).bold().foregroundColor(.primary)
             }
-            .padding(10)
-            .frame(width: 80)
-            .background(BlurView(style: .systemUltraThinMaterial))
-            .cornerRadius(10)
+            .padding(10).frame(width: 80).background(BlurView(style: .systemUltraThinMaterial)).cornerRadius(10)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.2)))
         }
     }
 }
-
 struct BlurView: UIViewRepresentable {
     var style: UIBlurEffect.Style
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        UIVisualEffectView(effect: UIBlurEffect(style: style))
-    }
+    func makeUIView(context: Context) -> UIVisualEffectView { UIVisualEffectView(effect: UIBlurEffect(style: style)) }
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
 }
 
-// UIImagePickerController setup for camera
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    @Environment(\.presentationMode) var presentationMode
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let parent: ImagePicker
-
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            parent.image = info[.originalImage] as? UIImage
-            parent.presentationMode.wrappedValue.dismiss()
-        }
-    }
-}
-
-#Preview {
-    BodyMeasurementView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
-}
 
 
