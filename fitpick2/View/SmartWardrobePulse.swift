@@ -60,9 +60,6 @@ struct SmartWardrobePulse: View {
         .cornerRadius(Theme.cornerRadius)
         .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
         .onAppear(perform: loadPulse)
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
-            loadPulse()
-        }
     }
 
     private func loadPulse() {

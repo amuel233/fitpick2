@@ -43,9 +43,6 @@ struct WeatherAccessoryTip: View {
         .cornerRadius(Theme.cornerRadius)
         .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
         .onAppear(perform: loadTip)
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
-            loadTip()
-        }
     }
 
     private func loadTip() {
