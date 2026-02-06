@@ -152,6 +152,19 @@ class FirestoreManager: ObservableObject {
                 }
             }
         }
+
+    /// Fetch the current user's gender string (e.g., "Male", "Female") from the users document.
+    func fetchUserGender(completion: @escaping (String?) -> Void) {
+        guard let email = Auth.auth().currentUser?.email else { completion(nil); return }
+        db.collection("users").document(email).getDocument { snapshot, error in
+            guard let data = snapshot?.data() else { completion(nil); return }
+            if let gender = data["gender"] as? String {
+                completion(gender)
+            } else {
+                completion(nil)
+            }
+        }
+    }
     
     // MARK: - Socials Feed Listener
     

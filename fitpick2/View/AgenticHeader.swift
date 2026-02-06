@@ -12,6 +12,7 @@ struct AgenticHeader: View {
     @EnvironmentObject var session: UserSession
     @StateObject private var vm = AgenticHeaderViewModel()
     let gap: HomeViewModel.GapMessage?
+    let isGeneratingAIPicks: Bool
     let tryOnAction: (() -> Void)?
     @State private var signInError: String? = nil
     @State private var showSignInError: Bool = false
@@ -78,9 +79,11 @@ struct AgenticHeader: View {
                 .background(.regularMaterial)
                 .cornerRadius(Theme.cornerRadius)
                 .shadow(color: Theme.cardShadow, radius: 10, x: 0, y: 5)
-                // If a gap message is provided and a calendar is synced, show it directly under the header
-                if let gap = gap, (vm.preferredProvider != nil || UserDefaults.standard.bool(forKey: "isLocalCalendarSynced")) {
-                    GapDetectionCard(gap: gap, tryOnAction: tryOnAction)
+                // If a gap message is provided, a calendar is synced, and there is an upcoming event, show it under the header
+                if let gap = gap,
+                   vm.nextEvent != nil,
+                   (vm.preferredProvider != nil || UserDefaults.standard.bool(forKey: "isLocalCalendarSynced")) {
+                    GapDetectionCard(gap: gap, isLoading: isGeneratingAIPicks, tryOnAction: tryOnAction)
                         .padding(.top, 8)
                 }
             } else {
@@ -122,31 +125,48 @@ struct AgenticHeader: View {
         .onAppear {
             vm.fetchStatus()
 
-            // Auto-connect to previously selected provider
-            if let provider = UserDefaults.standard.string(forKey: "preferredCalendarProvider") {
-                if provider == "google" {
-                    vm.connectGoogleCalendar { result in
-                        switch result {
-                        case .success(let info):
-                            if let email = info.email {
-                                session.email = email
-                                UserDefaults.standard.set(true, forKey: "isSignedIn")
-                                UserDefaults.standard.set(email, forKey: "signedInEmail")
-                                vm.signedInEmail = email
+            // Auto-probe for local calendar events first when no explicit provider is set,
+            // so the style gap can default to the next event without forcing sign-in.
+            if UserDefaults.standard.string(forKey: "preferredCalendarProvider") == nil {
+                let local = LocalCalendarManager()
+                local.fetchNextEventDetail { event, date in
+                    if let event = event {
+                        DispatchQueue.main.async {
+                            vm.nextEvent = event
+                            vm.nextEventDate = date
+                            if !event.isEmpty {
+                                NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
                             }
-                        case .failure(let err):
-                            signInError = err.localizedDescription
-                            showSignInError = true
                         }
                     }
-                } else if provider == "local" {
-                    vm.connectLocalCalendar { result in
-                        switch result {
-                        case .success(_):
-                            UserDefaults.standard.set(true, forKey: "isLocalCalendarSynced")
-                        case .failure(let err):
-                            signInError = err.localizedDescription
-                            showSignInError = true
+                }
+            } else {
+                // Auto-connect to previously selected provider
+                if let provider = UserDefaults.standard.string(forKey: "preferredCalendarProvider") {
+                    if provider == "google" {
+                        vm.connectGoogleCalendar { result in
+                            switch result {
+                            case .success(let info):
+                                if let email = info.email {
+                                    session.email = email
+                                    UserDefaults.standard.set(true, forKey: "isSignedIn")
+                                    UserDefaults.standard.set(email, forKey: "signedInEmail")
+                                    vm.signedInEmail = email
+                                }
+                            case .failure(let err):
+                                signInError = err.localizedDescription
+                                showSignInError = true
+                            }
+                        }
+                    } else if provider == "local" {
+                        vm.connectLocalCalendar { result in
+                            switch result {
+                            case .success(_):
+                                UserDefaults.standard.set(true, forKey: "isLocalCalendarSynced")
+                            case .failure(let err):
+                                signInError = err.localizedDescription
+                                showSignInError = true
+                            }
                         }
                     }
                 }
@@ -185,6 +205,10 @@ struct AgenticHeader: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
+            vm.fetchStatus()
+            vm.refreshConnection()
+        }
         
         .alert("Sign-in Error", isPresented: $showSignInError, actions: {
             Button("OK", role: .cancel) { showSignInError = false }
@@ -215,6 +239,47 @@ final class AgenticHeaderViewModel: ObservableObject {
         updateHeaderAppearance()
     }
     
+    /// Refresh the next event and header appearance without triggering sign-in flows.
+    func refreshEvents() {
+        calendar.fetchNextEventDetail { [weak self] event, date in
+            DispatchQueue.main.async {
+                self?.nextEvent = event
+                self?.nextEventDate = date
+                self?.aiSummary = nil
+                self?.updateGreeting()
+                self?.updateHeaderAppearance()
+                if let event = event, !event.isEmpty {
+                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                }
+            }
+        }
+    }
+
+    /// Try to refresh/restore the calendar connection (silent restore for Google, reconnect local) without UI.
+    func refreshConnection() {
+        preferredProvider = UserDefaults.standard.string(forKey: "preferredCalendarProvider")
+        if preferredProvider == "google" {
+            // Attempt silent restore of Google Sign-In and then refresh events
+            GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
+                DispatchQueue.main.async {
+                    if let user = user {
+                        self?.isConnected = true
+                        self?.signedInEmail = user.profile?.email
+                        self?.preferredProvider = "google"
+                        self?.refreshEvents()
+                    } else {
+                        // If restore failed, still try to refresh events (may work if calendar is public or cached)
+                        self?.refreshEvents()
+                    }
+                }
+            }
+        } else if preferredProvider == "local" {
+            // Re-fetch local calendar details (this does not present UI)
+            connectLocalCalendar { _ in }
+        } else {
+            // no provider set: nothing to refresh
+        }
+    }
     private func updateGreeting() {
         // Use a concise greeting without a day descriptor
         let greeting = "Good"
