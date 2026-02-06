@@ -503,6 +503,9 @@ final class HomeViewModel: ObservableObject {
 
     /// Public refresh entry used by pull-to-refresh in the UI
     func refreshAll() {
+        // Preserve existing gap message while refreshing so we don't briefly default it
+        let previousGap = self.gapDetectionMessage
+
         // Reload hero, calendar, and wardrobe state
         loadDynamicContent()
 
@@ -533,6 +536,21 @@ final class HomeViewModel: ObservableObject {
         // Notify other components to refresh (e.g., trending news)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: Notification.Name("HomeDidRefresh"), object: nil)
+        }
+        // If the user previously connected a calendar provider, request AgenticHeader to reconnect
+        DispatchQueue.main.async {
+            if let provider = UserDefaults.standard.string(forKey: "preferredCalendarProvider") {
+                NotificationCenter.default.post(name: Notification.Name("SyncCalendarRequested"), object: nil, userInfo: ["provider": provider])
+            } else if UserDefaults.standard.bool(forKey: "isLocalCalendarSynced") {
+                NotificationCenter.default.post(name: Notification.Name("SyncCalendarRequested"), object: nil, userInfo: ["provider": "local"])
+            }
+        }
+        // If no new gap message is set within a short window, restore the previous one
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            if self.gapDetectionMessage == nil {
+                self.gapDetectionMessage = previousGap
+            }
         }
     }
     
