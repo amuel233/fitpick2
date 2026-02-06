@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseAILogic
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @State private var showCloset: Bool = false
@@ -25,7 +26,7 @@ struct HomeView: View {
                         appState.selectedTab = viewModel.closetTabIndex
                     })
 
-                    AgenticHeader(gap: viewModel.gapDetectionMessage, tryOnAction: {
+                    AgenticHeader(gap: viewModel.gapDetectionMessage, isGeneratingAIPicks: viewModel.isGeneratingAIPicks, tryOnAction: {
                         if let gap = viewModel.gapDetectionMessage, gap.useTryOn {
                             appState.selectedTab = viewModel.closetTabIndex
                         }
@@ -183,7 +184,23 @@ struct TimeGreetingCard: View {
 
 struct GapDetectionCard: View {
     let gap: HomeViewModel.GapMessage
+    let isLoading: Bool
     let tryOnAction: (() -> Void)?
+
+    private func cleanedSuggestion(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Remove numeric prefixes like "1.", "2)", "1)" etc.
+        if let r = t.range(of: #"^\s*\d+[\.\)\:]*\s*"#, options: .regularExpression) {
+            t.removeSubrange(r)
+            t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Remove leading bullet characters
+        if let first = t.first, ["•", "-", "*"] .contains(String(first)) {
+            t.removeFirst()
+            t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return t
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -212,6 +229,23 @@ struct GapDetectionCard: View {
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // AI-generated suggestion bullets
+            if !gap.suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(gap.suggestions, id: \.self) { suggestion in
+                        let text = cleanedSuggestion(suggestion)
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("•")
+                                .font(.subheadline)
+                            Text(text)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
             HStack {
                 Spacer()
                 if gap.useTryOn {
@@ -223,6 +257,7 @@ struct GapDetectionCard: View {
                     .buttonStyle(.borderedProminent)
                     .tint(Color("fitPickGold"))
                 } else {
+                    let isClickable = !gap.externalURL.isEmpty
                     Button(action: {
                         if let url = URL(string: gap.externalURL) {
                             UIApplication.shared.open(url)
@@ -233,9 +268,12 @@ struct GapDetectionCard: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.accentColor)
+                    .tint(isClickable ? Color.accentColor : Color.gray)
+                    .disabled(!isClickable)
                 }
             }
+
+            // Button tint and enabled state reflect readiness (no loading bar shown)
         }
         .padding(Theme.cardPadding)
         .background(.regularMaterial)
@@ -261,11 +299,14 @@ final class HomeViewModel: ObservableObject {
     @Published var timeBasedGreeting: String
     @Published var locationString: String? = nil
     @Published var temperatureString: String? = nil
+    @Published var userGender: String = "Unspecified"
+    @Published var isGeneratingAIPicks: Bool = false
 
     struct GapMessage {
         let title: String
         let detail: String
         let externalURL: String
+        let suggestions: [String]
         let useTryOn: Bool
     }
     private var lastCoordinates: (Double, Double)? = nil
@@ -276,6 +317,8 @@ final class HomeViewModel: ObservableObject {
     private let firestore: FirestoreManager
     private let calendar: CalendarManager
     private let weather = WeatherManager()
+    private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
+    private lazy var textGen = ai.generativeModel(modelName: "gemini-2.5-flash")
     private var calendarObserver: NSObjectProtocol?
     
         init(closetTabIndex: Int = 1,
@@ -299,6 +342,15 @@ final class HomeViewModel: ObservableObject {
         self.calendar = calendar
         self.timeBasedGreeting = Self.computeTimeBasedGreeting()
         self.morningBriefing = Self.computeTimeBasedBriefing()
+
+        // Load user gender for gender-aware gap detection
+        firestore.fetchUserGender { [weak self] g in
+            DispatchQueue.main.async {
+                if let g = g, !g.isEmpty {
+                    self?.userGender = g
+                }
+            }
+        }
         
         // Load dynamic data
         loadDynamicContent()
@@ -348,13 +400,24 @@ final class HomeViewModel: ObservableObject {
 
     // Handle a calendar event: compute weather for date, check wardrobe, and set gapDetectionMessage accordingly
     func handleCalendarEvent(event: String, date: Date?) {
-        // Heuristic mapping from event keywords to required subcategories
+        // Heuristic mapping from event keywords to required subcategories, adjusted by user gender
         let lower = event.lowercased()
         var required: [String] = ["Top"]
+        let genderLower = userGender.lowercased()
         if lower.contains("formal") || lower.contains("gala") || lower.contains("black tie") {
-            required = ["Formal", "Heels"]
+            if genderLower.contains("female") {
+                required = ["Dress", "Heels"]
+            } else if genderLower.contains("male") {
+                required = ["Suit", "Dress Shoes"]
+            } else {
+                required = ["Formal", "Heels"]
+            }
         } else if lower.contains("meeting") || lower.contains("interview") || lower.contains("presentation") {
-            required = ["Blazer", "Shirt"]
+            if genderLower.contains("female") {
+                required = ["Blazer", "Pumps"]
+            } else {
+                required = ["Blazer", "Shirt"]
+            }
         } else if lower.contains("workout") || lower.contains("run") || lower.contains("yoga") {
             required = ["Activewear"]
         } else if lower.contains("beach") || lower.contains("pool") {
@@ -407,16 +470,72 @@ final class HomeViewModel: ObservableObject {
 
         if hasItems {
             self.tryOnAvailable = true
-            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", useTryOn: true)
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", suggestions: [], useTryOn: true)
         } else {
             self.tryOnAvailable = false
-            // build google search URL including all required items and location
-            let items = required.joined(separator: " ")
-            let loc = self.locationString ?? ""
-            let rawQuery = loc.isEmpty ? "buy \(items)" : "buy \(items) in \(loc)"
-            let query = rawQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "buy+\(items)"
-            let url = "https://www.google.com/search?q=\(query)"
-            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: url, useTryOn: false)
+            // Use AI to generate better 'View Picks' suggestions (falls back to simple Google query)
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", suggestions: [], useTryOn: false)
+            self.isGeneratingAIPicks = true
+            Task {
+                let (aiURL, suggestions) = await self.generateAIPicks(for: required, event: event)
+                DispatchQueue.main.async {
+                    // update the existing gap message with the AI-built URL and suggestions
+                    self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: aiURL, suggestions: suggestions, useTryOn: false)
+                    self.isGeneratingAIPicks = false
+                }
+            }
+        }
+    }
+
+    /// Ask the AI to produce short shopping/search keywords and return both a search URL and a list of suggestions.
+    private func generateAIPicks(for items: [String], event: String) async -> (String, [String]) {
+        let itemsStr = items.joined(separator: ", ")
+        let loc = self.locationString ?? "your area"
+        // Try to include user gender and measurements for personalized suggestions
+        var measurementsText = ""
+        if let m = await fetchUserMeasurements() {
+            let pairs = m.map { "\($0.key): \($0.value)" }.sorted().joined(separator: ", ")
+            if !pairs.isEmpty { measurementsText = "User measurements: \(pairs)." }
+        }
+        let genderText = "User gender: \(self.userGender)."
+        let prompt = "You are a fashion assistant. Provide 5 concise shopping search phrases (one per line) useful to find items: \(itemsStr) for the event '\(event)' in \(loc). \(genderText) \(measurementsText) Keep phrases short, e.g. 'black oxford dress shoes' or 'black cocktail dress'."
+
+        // Try AI
+        do {
+            let response = try await textGen.generateContent(prompt)
+            if let txt = response.candidates.first?.content.parts.compactMap({ ($0 as? TextPart)?.text }).joined(separator: "\n"), !txt.isEmpty {
+                // Normalize into lines or comma-separated pieces
+                let lines = txt
+                    .replacingOccurrences(of: ",", with: "\n")
+                    .split(separator: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                if !lines.isEmpty {
+                    // Build query from top suggestions
+                    let query = lines.joined(separator: "+")
+                    let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+                    return ("https://www.google.com/search?q=\(encoded)", lines)
+                }
+            }
+        } catch {
+            // fallthrough to fallback
+        }
+
+        // Fallback: simple search based on items and location
+        let base = items.joined(separator: " ")
+        let rawQuery = "buy \(base) in \(loc)"
+        let q = rawQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? rawQuery.replacingOccurrences(of: " ", with: "+")
+        return ("https://www.google.com/search?q=\(q)", ["buy \(base) in \(loc)"])
+    }
+
+    /// Async wrapper to fetch measurements from FirestoreManager.
+    private func fetchUserMeasurements() async -> [String: Double]? {
+        return await withCheckedContinuation { cont in
+            let email = self.firestore.currentEmail
+            guard let e = email else { cont.resume(returning: nil); return }
+            self.firestore.fetchUserMeasurements(email: e) { measurements in
+                cont.resume(returning: measurements)
+            }
         }
     }
 
@@ -440,20 +559,28 @@ final class HomeViewModel: ObservableObject {
         firestore.fetchWardrobeCounts { [weak self] counts in
             guard let self = self else { return }
 
-            // Simple heuristic: if event looks formal, require formal shoes; otherwise require at least one item
+            // Simple heuristic: if event looks formal, require formal shoes (gender-aware); otherwise require at least one item
             let isFormal = upcoming.localizedCaseInsensitiveContains("formal") || upcoming.localizedCaseInsensitiveContains("black tie") || upcoming.localizedCaseInsensitiveContains("gala")
-            let formalCount = (counts["Heels"] ?? 0) + (counts["Formal"] ?? 0)
+            let genderLower = self.userGender.lowercased()
+            var formalKeys: [String] = ["Formal", "Heels"]
+            if genderLower.contains("female") {
+                formalKeys = ["Dress", "Heels"]
+            } else if genderLower.contains("male") {
+                formalKeys = ["Suit", "Dress Shoes"]
+            }
+            let formalCount = formalKeys.reduce(0) { $0 + (counts[$1] ?? 0) }
             let totalItems = counts.values.reduce(0, +)
 
             DispatchQueue.main.async {
                 if isFormal {
                     self.tryOnAvailable = formalCount > 0
-                        if !self.tryOnAvailable {
-                        let url = self.buildGoogleSearchURL(for: ["Formal","Heels"], event: upcoming)
+                    if !self.tryOnAvailable {
+                        let url = self.buildGoogleSearchURL(for: formalKeys, event: upcoming)
                         self.gapDetectionMessage = GapMessage(
-                            title: "Style Gap: No formal shoes found",
-                            detail: "We couldn't find formal shoes in your closet metadata. View suggested picks.",
+                            title: "Style Gap: No formal items found",
+                            detail: "We couldn't find formal items in your closet metadata. View suggested picks.",
                             externalURL: url,
+                            suggestions: [],
                             useTryOn: false
                         )
                     } else {
@@ -467,6 +594,7 @@ final class HomeViewModel: ObservableObject {
                             title: "Style Gap: Empty wardrobe",
                             detail: "We couldn't find suitable items in your closet.",
                             externalURL: url,
+                            suggestions: [],
                             useTryOn: false
                         )
                     } else {
@@ -491,12 +619,29 @@ final class HomeViewModel: ObservableObject {
             }
         }
         
-        // Fetch calendar event details and compute gap detection (keeps 'Suggested' state)
-        calendar.fetchNextEventDetail { [weak self] event, date in
-            guard let self = self, let event = event else { return }
-            // Reuse the same calendar-event handling pipeline so suggested outfits persist after refresh
-            DispatchQueue.main.async {
-                self.handleCalendarEvent(event: event, date: date)
+        // Fetch calendar event details and compute gap detection (keeps 'Suggested' state).
+        // Use the user's preferred provider if persisted, otherwise default to Google-based CalendarManager.
+        let preferred = UserDefaults.standard.string(forKey: "preferredCalendarProvider")
+        // Local-first fallback: prefer iOS Calendar when user hasn't explicitly chosen Google
+        if preferred == "google" {
+            calendar.fetchNextEventDetail { [weak self] event, date in
+                guard let self = self, let event = event else { return }
+                DispatchQueue.main.async { self.handleCalendarEvent(event: event, date: date) }
+            }
+        } else {
+            // Try local calendar first; if nothing found, fall back to Google-managed calendar
+            let local = LocalCalendarManager()
+            local.fetchNextEventDetail { [weak self] event, date in
+                guard let self = self else { return }
+                if let event = event {
+                    DispatchQueue.main.async { self.handleCalendarEvent(event: event, date: date) }
+                } else {
+                    // Fallback to Google calendar if local yielded nothing
+                    self.calendar.fetchNextEventDetail { event2, date2 in
+                        guard let event2 = event2 else { return }
+                        DispatchQueue.main.async { self.handleCalendarEvent(event: event2, date: date2) }
+                    }
+                }
             }
         }
     }
@@ -505,6 +650,12 @@ final class HomeViewModel: ObservableObject {
     func refreshAll() {
         // Reload hero, calendar, and wardrobe state
         loadDynamicContent()
+
+        // Refresh greeting text
+        DispatchQueue.main.async {
+            self.timeBasedGreeting = Self.computeTimeBasedGreeting()
+            self.morningBriefing = Self.computeTimeBasedBriefing()
+        }
 
         // Refresh temperature and location
         weather.requestLocation { [weak self] res in
