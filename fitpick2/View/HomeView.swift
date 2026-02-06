@@ -184,7 +184,6 @@ struct TimeGreetingCard: View {
 struct GapDetectionCard: View {
     let gap: HomeViewModel.GapMessage
     let tryOnAction: (() -> Void)?
-    @State private var selectedEventIndex: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -206,22 +205,6 @@ struct GapDetectionCard: View {
                     }
                 }
                 Spacer()
-            }
-
-            // If multiple candidate events were provided for the same day, allow the user to pick one.
-            if let events = gap.candidateEvents, events.count > 1 {
-                Picker(selection: $selectedEventIndex, label: Text(events[selectedEventIndex]).font(.subheadline)) {
-                    ForEach(Array(events.enumerated()), id: \.offset) { pair in
-                        Text(pair.element).tag(pair.offset)
-                    }
-                }
-                .pickerStyle(.menu)
-                .onChange(of: selectedEventIndex) { idx in
-                    let selected = events[idx]
-                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": selected, "eventDate": gap.eventDate as Any])
-                }
-                .padding(.bottom, 4)
-
             }
 
             Text(gap.detail)
@@ -284,10 +267,6 @@ final class HomeViewModel: ObservableObject {
         let detail: String
         let externalURL: String
         let useTryOn: Bool
-        // Optional list of events occurring on the same upcoming day
-        let candidateEvents: [String]?
-        // The shared date for the candidate events (if any)
-        let eventDate: Date?
     }
     private var lastCoordinates: (Double, Double)? = nil
 
@@ -357,14 +336,10 @@ final class HomeViewModel: ObservableObject {
             // Listen for calendar updates (from AgenticHeader) — handle combined style gap + weather + try-on
             calendarObserver = NotificationCenter.default.addObserver(forName: Notification.Name("CalendarDidUpdate"), object: nil, queue: .main) { [weak self] note in
                 guard let self = self else { return }
-                // Accept either a single `event` or an `events` array for multiple events on the same day
-                if let events = note.userInfo?["events"] as? [String], !events.isEmpty {
-                    let eventDate = note.userInfo?["eventDate"] as? Date
-                    let first = events[0]
-                    self.handleCalendarEvent(event: first, date: eventDate, candidateEvents: events)
-                } else if let event = note.userInfo?["event"] as? String {
-                    let eventDate = note.userInfo?["eventDate"] as? Date
-                    self.handleCalendarEvent(event: event, date: eventDate, candidateEvents: nil)
+                let event = note.userInfo?["event"] as? String
+                let eventDate = note.userInfo?["eventDate"] as? Date
+                if let event = event, !event.isEmpty {
+                    self.handleCalendarEvent(event: event, date: eventDate)
                 }
             }
     }
@@ -372,7 +347,7 @@ final class HomeViewModel: ObservableObject {
     @Published var tryOnAvailable: Bool = false
 
     // Handle a calendar event: compute weather for date, check wardrobe, and set gapDetectionMessage accordingly
-    func handleCalendarEvent(event: String, date: Date?, candidateEvents: [String]? = nil) {
+    func handleCalendarEvent(event: String, date: Date?) {
         // Heuristic mapping from event keywords to required subcategories
         let lower = event.lowercased()
         var required: [String] = ["Top"]
@@ -405,18 +380,18 @@ final class HomeViewModel: ObservableObject {
                     }
 
                     DispatchQueue.main.async {
-                        self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet, candidateEvents: candidateEvents, eventDate: d)
+                        self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet)
                     }
                 }
             } else {
                 DispatchQueue.main.async {
-                    self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet, candidateEvents: candidateEvents, eventDate: nil)
+                    self.updateGapMessage(event: event, required: required, hasItems: hasItems, weatherSnippet: weatherSnippet)
                 }
             }
         }
     }
 
-    private func updateGapMessage(event: String, required: [String], hasItems: Bool, weatherSnippet: String?, candidateEvents: [String]? = nil, eventDate: Date? = nil) {
+    private func updateGapMessage(event: String, required: [String], hasItems: Bool, weatherSnippet: String?) {
         let title: String
         if hasItems {
             title = "Suggested Outfit Available"
@@ -432,7 +407,7 @@ final class HomeViewModel: ObservableObject {
 
         if hasItems {
             self.tryOnAvailable = true
-            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", useTryOn: true, candidateEvents: candidateEvents, eventDate: eventDate)
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: "", useTryOn: true)
         } else {
             self.tryOnAvailable = false
             // build google search URL including all required items and location
@@ -441,7 +416,7 @@ final class HomeViewModel: ObservableObject {
             let rawQuery = loc.isEmpty ? "buy \(items)" : "buy \(items) in \(loc)"
             let query = rawQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "buy+\(items)"
             let url = "https://www.google.com/search?q=\(query)"
-            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: url, useTryOn: false, candidateEvents: candidateEvents, eventDate: eventDate)
+            self.gapDetectionMessage = GapMessage(title: title, detail: detail, externalURL: url, useTryOn: false)
         }
     }
 
@@ -478,10 +453,8 @@ final class HomeViewModel: ObservableObject {
                         self.gapDetectionMessage = GapMessage(
                             title: "Style Gap: No formal shoes found",
                             detail: "We couldn't find formal shoes in your closet metadata. View suggested picks.",
-                                externalURL: url,
-                                useTryOn: false,
-                                candidateEvents: nil,
-                                eventDate: nil
+                            externalURL: url,
+                            useTryOn: false
                         )
                     } else {
                         self.gapDetectionMessage = nil
@@ -493,10 +466,8 @@ final class HomeViewModel: ObservableObject {
                         self.gapDetectionMessage = GapMessage(
                             title: "Style Gap: Empty wardrobe",
                             detail: "We couldn't find suitable items in your closet.",
-                                externalURL: url,
-                                useTryOn: false,
-                                candidateEvents: nil,
-                                eventDate: nil
+                            externalURL: url,
+                            useTryOn: false
                         )
                     } else {
                         self.gapDetectionMessage = nil
@@ -532,9 +503,6 @@ final class HomeViewModel: ObservableObject {
 
     /// Public refresh entry used by pull-to-refresh in the UI
     func refreshAll() {
-        // Preserve existing gap message while refreshing so we don't briefly default it
-        let previousGap = self.gapDetectionMessage
-
         // Reload hero, calendar, and wardrobe state
         loadDynamicContent()
 
@@ -565,21 +533,6 @@ final class HomeViewModel: ObservableObject {
         // Notify other components to refresh (e.g., trending news)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: Notification.Name("HomeDidRefresh"), object: nil)
-        }
-        // If the user previously connected a calendar provider, request AgenticHeader to reconnect
-        DispatchQueue.main.async {
-            if let provider = UserDefaults.standard.string(forKey: "preferredCalendarProvider") {
-                NotificationCenter.default.post(name: Notification.Name("SyncCalendarRequested"), object: nil, userInfo: ["provider": provider])
-            } else if UserDefaults.standard.bool(forKey: "isLocalCalendarSynced") {
-                NotificationCenter.default.post(name: Notification.Name("SyncCalendarRequested"), object: nil, userInfo: ["provider": "local"])
-            }
-        }
-        // If no new gap message is set within a short window, restore the previous one
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self = self else { return }
-            if self.gapDetectionMessage == nil {
-                self.gapDetectionMessage = previousGap
-            }
         }
     }
     
