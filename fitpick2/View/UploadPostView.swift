@@ -28,8 +28,10 @@ struct UploadPostView: View {
     @EnvironmentObject var session: UserSession
     @Environment(\.dismiss) var dismiss
     
+    // Updated Theme Colors
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color(red: 26/255, green: 26/255, blue: 27/255)
+    let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
+    let fitPickText = Color(red: 26/255, green: 26/255, blue: 27/255)
 
     // MARK: - Rendered View
     var adjustedImageView: some View {
@@ -46,13 +48,15 @@ struct UploadPostView: View {
             }
         }
         .frame(width: 400, height: 400)
+        .background(Color.white) // Base for the image container
         .clipped()
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                fitPickBlack.ignoresSafeArea()
+                // Main Background
+                fitPickWhite.ignoresSafeArea()
                 .onTapGesture {
                             hideKeyboard()
                         }
@@ -64,6 +68,7 @@ struct UploadPostView: View {
                             adjustedImageView
                                 .overlay(RoundedRectangle(cornerRadius: 15).stroke(fitPickGold, lineWidth: 1))
                                 .cornerRadius(15)
+                                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
                                 .gesture(
                                     DragGesture()
                                         .onChanged { value in
@@ -94,20 +99,24 @@ struct UploadPostView: View {
                         handleImageSelection(newValue)
                     }
 
-                    // Caption Field
+                    // Caption Field - Adjusted for light theme
                     TextField(
                         "",
                         text: $caption,
-                        prompt: Text("Say something about your fit...").foregroundColor(.white.opacity(0.6)),
+                        prompt: Text("Say something about your fit...").foregroundColor(.gray),
                         axis: .vertical
                     )
                     .lineLimit(3, reservesSpace: true)
                     .padding()
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .foregroundColor(fitPickText)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                    )
                     .padding(.horizontal)
-                    .padding(.top, 15)
+                    .padding(.top, 20)
 
                     // Preview & Share Button
                     if isUploading {
@@ -117,14 +126,14 @@ struct UploadPostView: View {
                         Button(action: generatePreview) {
                             Text("Preview & Share")
                                 .font(.headline)
-                                .foregroundColor(.black)
+                                .foregroundColor(.white) // White text on gold
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(postImage == nil || caption.isEmpty ? Color.gray : fitPickGold)
-                                .cornerRadius(10)
+                                .background(postImage == nil || caption.isEmpty ? Color.gray.opacity(0.3) : fitPickGold)
+                                .cornerRadius(12)
                         }
                         .padding(.horizontal)
-                        .padding(.top, 20)
+                        .padding(.top, 25)
                         .disabled(postImage == nil || caption.isEmpty)
                     }
                     
@@ -133,7 +142,11 @@ struct UploadPostView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) { Text("New Post").foregroundColor(.white) }
+                ToolbarItem(placement: .principal) {
+                    Text("New Post")
+                        .fontWeight(.bold)
+                        .foregroundColor(fitPickText)
+                }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }.foregroundColor(fitPickGold)
                 }
@@ -155,11 +168,11 @@ extension UploadPostView {
         VStack {
             HStack {
                 Button(action: { postImage = nil; selectedItem = nil }) {
-                    Image(systemName: "xmark.circle.fill").background(Circle().fill(Color.black.opacity(0.5)))
+                    Image(systemName: "xmark.circle.fill").background(Circle().fill(Color.white))
                 }
                 Spacer()
                 Button(action: resetPosition) {
-                    Image(systemName: "arrow.counterclockwise.circle.fill").background(Circle().fill(Color.black.opacity(0.5)))
+                    Image(systemName: "arrow.counterclockwise.circle.fill").background(Circle().fill(Color.white))
                 }
             }
             .padding(12).foregroundColor(fitPickGold).font(.title2)
@@ -168,40 +181,54 @@ extension UploadPostView {
     }
     
     private var emptyStatePlaceholder: some View {
-        RoundedRectangle(cornerRadius: 15).fill(Color.white.opacity(0.1))
+        RoundedRectangle(cornerRadius: 15)
+            .fill(Color.white)
             .frame(height: 400)
-            .overlay(VStack {
-                Image(systemName: "photo.on.rectangle.angled").font(.largeTitle)
-                Text("Upload your photo").font(.callout)
+            .overlay(
+                RoundedRectangle(cornerRadius: 15)
+                    .stroke(fitPickGold.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
+            )
+            .overlay(VStack(spacing: 12) {
+                Image(systemName: "plus.viewfinder").font(.system(size: 40))
+                Text("Upload your photo").font(.headline)
             }.foregroundColor(fitPickGold))
     }
     
     private var previewSheetContent: some View {
         ZStack {
-            fitPickBlack.ignoresSafeArea()
+            fitPickWhite.ignoresSafeArea()
             VStack(spacing: 20) {
-                Text("Post Preview").font(.headline).foregroundColor(.white).padding(.top)
+                Text("Post Preview")
+                    .font(.headline)
+                    .foregroundColor(fitPickText)
+                    .padding(.top)
                 
                 if let rendered = finalRenderedImage {
                     Image(uiImage: rendered)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 300, height: 300)
-                        .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(fitPickGold, lineWidth: 1))
+                        .cornerRadius(12)
+                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
                 }
                 
                 ScrollView {
                     Text(caption)
                         .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(fitPickText.opacity(0.8))
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxHeight: 100)
                 
                 Button(action: uploadPost) {
-                    Text("Confirm & Post").font(.headline).foregroundColor(.black)
-                        .frame(maxWidth: .infinity).padding().background(fitPickGold).cornerRadius(10)
+                    Text("Confirm & Post")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(fitPickGold)
+                        .cornerRadius(12)
                 }
                 .padding(.horizontal)
                 
@@ -213,6 +240,8 @@ extension UploadPostView {
         .presentationDetents([.medium])
     }
 
+    // ... (rest of functions like resetPosition, handleImageSelection, generatePreview, and uploadPost remain the same)
+    
     func resetPosition() {
         scale = 1.0; lastScale = 1.0; offset = .zero; lastOffset = .zero
     }

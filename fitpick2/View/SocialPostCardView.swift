@@ -20,27 +20,25 @@ struct SocialPostCardView: View {
             HStack {
                 let myEmail = firestoreManager.currentEmail ?? ""
                 let targetEmail = post.userEmail
-                // Logic: Access if I am following them OR if it is my own post
+                // Strictly only true if current user follows the post author
                 let isFollowing = firestoreManager.currentUserData?.following.contains(targetEmail) ?? false
-                let isMe = (myEmail == targetEmail)
                 
-                if isFollowing || !isMe {
-                    NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
-                        Text(post.username)
-                            .font(.headline)
-                            .foregroundColor(goldColor)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                } else {
-                    // Disabled state for non-followers
+                // REDIRECTION LOGIC: Strictly for followers only.
+                NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
                     Text(post.username)
                         .font(.headline)
-                        .foregroundColor(goldColor.opacity(0.5))
+                        .foregroundColor(isFollowing ? goldColor : goldColor)
+                        // Ensure the text area is clickable even on transparent parts
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(BorderlessButtonStyle())
+                // This is the key: it is ONLY clickable if isFollowing is true
+                .disabled(!isFollowing)
                 
                 Spacer()
                 
-                if !isMe {
+                // Follow Button (Logic remains the same)
+                if myEmail != targetEmail {
                     Button(action: {
                         firestoreManager.toggleFollow(
                             currentEmail: myEmail,
@@ -60,7 +58,7 @@ struct SocialPostCardView: View {
                 }
             }
             .padding(.horizontal)
-            .zIndex(10)
+//            .zIndex(10)
             
             // --- IMAGE SECTION ---
             ZStack(alignment: .topTrailing) {
