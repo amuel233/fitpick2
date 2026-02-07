@@ -13,37 +13,39 @@ struct SocialsView: View {
     let fitPickGold = Color("fitPickGold")
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {            
-            VStack(spacing: 0) {
-                HStack {
-                    Text("Feed")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundColor(fitPickGold)
-                    Spacer()
-                }
-                .padding()
+        NavigationStack {
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Feed")
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .foregroundColor(fitPickGold)
+                        Spacer()
+                    }
+                    .padding()
 
-                ScrollView {
-                    LazyVStack(spacing: 20) {
-                        ForEach(firestoreManager.posts) { post in
-                            SocialPostCardView(
-                                post: post,
-                                goldColor: fitPickGold,
-                                firestoreManager: firestoreManager
-                            )
+                    ScrollView {
+                        LazyVStack(spacing: 20) {
+                            ForEach(firestoreManager.posts) { post in
+                                SocialPostCardView(
+                                    post: post,
+                                    goldColor: fitPickGold,
+                                    firestoreManager: firestoreManager
+                                )
+                            }
                         }
                     }
+                    .refreshable { firestoreManager.fetchSocialPosts() }
                 }
-                .refreshable { firestoreManager.fetchSocialPosts() }
+                
+                // Upload Button
+                Button(action: { isShowingUpload = true }) {
+                    Image(systemName: "plus").font(.title.bold()).foregroundColor(.black)
+                        .frame(width: 60, height: 60).background(fitPickGold).clipShape(Circle())
+                }
+                .padding(25)
             }
-            
-            // Upload Button
-            Button(action: { isShowingUpload = true }) {
-                Image(systemName: "plus").font(.title.bold()).foregroundColor(.black)
-                    .frame(width: 60, height: 60).background(fitPickGold).clipShape(Circle())
-            }
-            .padding(25)
+            .fullScreenCover(isPresented: $isShowingUpload) { UploadPostView() }
         }
-        .fullScreenCover(isPresented: $isShowingUpload) { UploadPostView() }
     }
 }
