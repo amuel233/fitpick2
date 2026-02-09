@@ -9,6 +9,8 @@ import SwiftUI
 import CoreData
 import AVFoundation
 import Vision
+import FirebaseStorage
+import FirebaseFirestore
 
 struct AutoMeasureView: View {
     
@@ -22,6 +24,9 @@ struct AutoMeasureView: View {
     
     @State private var isLocked = false
     
+    @EnvironmentObject var session: UserSession
+    
+        
     @Environment(\.dismiss) var dismiss // Add this line
 
     
@@ -253,6 +258,26 @@ struct AutoMeasureView: View {
             // Lock the values and Print
             isLocked = true
             
+            guard let buffer = cameraManager.currentBuffer else { return }
+            
+            uploadCapturedImage(buffer: buffer) { imageUrl in
+                guard let url = imageUrl else {
+                    print("Failed to get image URL")
+                    return
+                }
+                let dataToSave: [String: Any] = ["bodybase": url]
+                let db = Firestore.firestore()
+                
+                db.collection("users").document(session.email ?? "").setData(dataToSave, merge: true){ error in
+                        if let error = error {
+                            print("❌ Error updating Firestore: \(error.localizedDescription)")
+                        } else {
+                            print("✅ Successfully saved image URL and measurements to Firestore")
+                        }
+                    }
+        
+            }
+            
             let h = userHeightCM
             let w = extractDouble(from: measurements["Waist"])
             let i = extractDouble(from: measurements["Inseam"])
@@ -300,6 +325,8 @@ class CameraManager: NSObject, ObservableObject {
     let session = AVCaptureSession()
     private let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    var currentBuffer: CMSampleBuffer?
+
     
     // This is where the processed Vision results will be sent
     var onFrameDetected: ((CMSampleBuffer) -> Void)?
@@ -334,6 +361,7 @@ class CameraManager: NSObject, ObservableObject {
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         // Send the raw frame to our processor
+        self.currentBuffer = sampleBuffer // Store it
         onFrameDetected?(sampleBuffer)
     }
 }
@@ -366,4 +394,42 @@ struct SkeletonView: View {
     }
 }
 
-
+extension AutoMeasureView {
+    
+    func uploadCapturedImage(buffer: CMSampleBuffer, completion: @escaping (String?) -> Void) {
+        // 1. Convert Buffer to UIImage
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(buffer) else {
+            completion(nil)
+            return
+        }
+        
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            completion(nil)
+            return
+        }
+        
+        // Note: Orientation .right because we are in portrait using the back camera
+        let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+        guard let imageData = uiImage.jpegData(compressionQuality: 0.7) else {
+            completion(nil)
+            return
+        }
+        
+        // 2. Upload to Cloud Storage
+        let storageRef = Storage.storage().reference().child("users/\(session.email ?? "")/body_base2.jpg")
+        
+        storageRef.putData(imageData, metadata: nil) { metadata, error in
+            if let error = error {
+                print("Error uploading: \(error)")
+                completion(nil)
+                return
+            }
+            
+            storageRef.downloadURL { url, error in
+                completion(url?.absoluteString)
+            }
+        }
+    }
+}
