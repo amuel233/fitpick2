@@ -1,10 +1,3 @@
-//
-//  BodyMeasurementView.swift
-//  fitpick2
-//
-//  Created by Amuel Ryco Nidoy on 1/20/26.
-//
-
 import SwiftUI
 import Foundation
 import FirebaseAuth
@@ -12,274 +5,215 @@ import FirebaseFirestore
 import GoogleSignIn
 
 struct BodyMeasurementView: View {
-
-    @State private var username: String = ""
-    @State private var gender: String = "Male"
-    @State private var showAutoMeasure = false // 1. State to control the view
-    
-    @EnvironmentObject var session: UserSession
-    
-    @State private var height: Double = 0 //ok
-    @State private var bodyWeight: Double = 0 //ok
-    @State private var chest: Double = 0
-    @State private var shoulderWidth: Double = 0
-    @State private var armLength: Double = 0 //ok
-    @State private var waist: Double = 0 //ok
-    @State private var hips: Double = 0
-    @State private var inseam: Double = 0 //ok
-    @State private var shoeSize: Double = 0 //ok
-    
+    @StateObject private var viewModel = BodyMeasurementViewModel()
+    @State private var showAutoMeasure = false
     @State private var showImagePicker = false
     @State private var selectedSelfie: UIImage? = nil
     
+    @EnvironmentObject var session: UserSession
     @StateObject private var firestoreManager = FirestoreManager()
     @StateObject private var storageManager = StorageManager()
     
-    // Brand Colors
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("User Information")
-                        .font(.system(size: 34, weight: .bold))
-                        .padding(.top, 10)
-
-                    TextField("Username", text: $username)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
-                    
-                    Picker("Gender", selection: $gender) {
-                        Text("Male").tag("Male")
-                        Text("Female").tag("Female")
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        showAutoMeasure = true // 3. Trigger the action
-                    }) {
-                        Text("Auto-Measure")
-                            .fontWeight(.semibold)
-                            .frame(minWidth: 120)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .fullScreenCover(isPresented: $showAutoMeasure) {
- 
-                    AutoMeasureView(onCapture: { h, w, i, a, s, c, hi in
-                            self.height = h
-                            self.waist = w
-                            self.inseam = i
-                            self.armLength = a
-                            self.shoulderWidth = s
-                            self.chest = c
-                            self.hips = hi
-                        
-                            showAutoMeasure = false
-                        })
-                }
-
+            GeometryReader { geo in
                 ZStack {
-                    Image(gender)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: .infinity)
-                        .padding(.vertical, 40)
-                        .opacity(0.8)
+                    Color(.systemBackground).ignoresSafeArea()
                     
-                    MeasurementLine(label: "Height", value: $height, unit: "cm", isVertical: true)
-                        .frame(height: 380)
-                        .offset(x: -165, y: -17)
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            
+                            // --- 1. Top Header Section (Username & Auto-Measure) ---
+                            VStack(alignment: .leading, spacing: 15) {
+                                Text("User Information")
+                                    .font(.system(size: 32, weight: .black, design: .rounded))
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("USERNAME")
+                                        .font(.caption2).bold().foregroundColor(.secondary)
+                                    TextField("Enter username", text: $viewModel.username)
+                                        .padding()
+                                        .background(Color(.secondarySystemBackground))
+                                        .cornerRadius(12)
+                                }
 
-                    MeasurementLine(label: "Arm", value: $armLength, unit: "cm", isVertical: true)
-                        .frame(height: 160)
-                        .offset(x: -70, y: -70)
+                                Picker("Gender", selection: $viewModel.gender) {
+                                    Text("Male").tag("Male")
+                                    Text("Female").tag("Female")
+                                }
+                                .pickerStyle(.segmented)
+                                
+                                Button(action: { showAutoMeasure = true }) {
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                        Text("Auto-Measure")
+                                    }
+                                    .font(.headline).foregroundColor(.white)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                    .background(fitPickGold)
+                                    .cornerRadius(12)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 10)
 
-                    MeasurementLine(label: "Inseam", value: $inseam, unit: "cm", isVertical: true)
-                        .frame(height: 190)
-                        .offset(x: 0, y: 80)
+                            // --- 2. HERO Body Visualizer (Scrolling & Interactive) ---
+                            ZStack {
+                                // Large Avatar Image
+                                Image(viewModel.gender ?? "Male")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(height: geo.size.height * 0.7)
+                                    .shadow(color: .black.opacity(0.1), radius: 15)
+                                
+                                // Measurement Lines & Interactive Callouts
+                                HStack(alignment: .center, spacing: 0) {
+                                    // Left Side (Lengths)
+                                    VStack(alignment: .leading, spacing: geo.size.height * 0.1) {
+                                        MeasurementCallout(label: "Height", value: $viewModel.height, unit: "cm", alignment: .leading)
+                                        MeasurementCallout(label: "Arm", value: $viewModel.armLength, unit: "cm", alignment: .leading)
+                                        MeasurementCallout(label: "Inseam", value: $viewModel.inseam, unit: "cm", alignment: .leading)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    
+                                    Spacer()
+                                    
+                                    // Right Side (Widths)
+                                    VStack(alignment: .trailing, spacing: geo.size.height * 0.07) {
+                                        MeasurementCallout(label: "Shoulder", value: $viewModel.shoulderWidth, unit: "cm", alignment: .trailing)
+                                        MeasurementCallout(label: "Chest", value: $viewModel.chest, unit: "cm", alignment: .trailing)
+                                        MeasurementCallout(label: "Waist", value: $viewModel.waist, unit: "cm", alignment: .trailing)
+                                        MeasurementCallout(label: "Hips", value: $viewModel.hips, unit: "cm", alignment: .trailing)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                }
+                                .padding(.horizontal, 15)
+                            }
+                            .frame(height: geo.size.height * 0.75)
+                            .padding(.vertical, 30)
 
-                    MeasurementLine(label: "Shoulder", value: $shoulderWidth, unit: "cm", isVertical: false)
-                        .frame(width: 100)
-                        .offset(y: -130)
-                    
-                    MeasurementLine(label: "Chest", value: $chest, unit: "cm", isVertical: false)
-                        .frame(width: 60)
-                        .offset(y: -100)
-                    
-                    MeasurementLine(label: "Waist", value: $waist, unit: "cm", isVertical: false)
-                        .frame(width: 50)
-                        .offset(y: -65)
+                            // --- 3. Bottom Profile Form ---
+                            VStack(spacing: 20) {
+                                HStack(spacing: 15) {
+                                    StatBox(label: "Weight", value: $viewModel.bodyWeight, unit: "kg", icon: "scalemass.fill")
+                                    StatBox(label: "Shoes", value: $viewModel.shoeSize, unit: "US", icon: "shoeprints.fill")
+                                }
 
-                    MeasurementLine(label: "Hips", value: $hips, unit: "cm", isVertical: false)
-                        .frame(width: 75)
-                        .offset(y: -30)
+                                Button(action: { showImagePicker = true }) {
+                                    Label(selectedSelfie == nil ? "Selfie" : "Selfie Ready", systemImage: "camera.fill")
+                                        .font(.subheadline).bold()
+                                        .foregroundColor(selectedSelfie == nil ? .primary : .green)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                        .background(Color(.secondarySystemBackground))
+                                        .cornerRadius(12)
+                                }
 
-                    VStack {
-                        Spacer()
-                        HStack {
-                            StatBox(label: "Body", value: $bodyWeight, unit: "kg")
-                            Spacer()
-                            StatBox(label: "Shoe Size", value: $shoeSize, unit: "")
+                                Button(action: { saveProfile() }) {
+                                    Text("Save Changes")
+                                        .font(.headline).foregroundColor(.white)
+                                        .frame(maxWidth: .infinity).padding(.vertical, 18)
+                                        .background(viewModel.username.isEmpty ? Color.gray : Color.black)
+                                        .cornerRadius(15)
+                                }
+                                .disabled(viewModel.username.isEmpty)
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 60)
                         }
-                        .padding(.horizontal, 30)
-                        .padding(.bottom, 15)
                     }
+                }
+            }
+        }
+        .onAppear { viewModel.fetchUserData() }
+        .fullScreenCover(isPresented: $showAutoMeasure) {
+            AutoMeasureView { h, w, i, a, s, c, hi in
+                viewModel.height = h; viewModel.waist = w; viewModel.inseam = i
+                viewModel.armLength = a; viewModel.shoulderWidth = s; viewModel.chest = c; viewModel.hips = hi
+                showAutoMeasure = false
+            }
+        }
+        .sheet(isPresented: $showImagePicker) {
+            FaceCaptureView(selectedImage: $selectedSelfie)
+        }
+    }
+
+    private func saveProfile() {
+        guard let userEmail = session.email, !userEmail.isEmpty else { return }
+        let oldUsername = firestoreManager.currentUserData?.username ?? ""
+        let db = Firestore.firestore()
+        
+        if let selfie = selectedSelfie {
+            storageManager.uploadSelfie(email: userEmail, selfie: selfie) { url in
+                db.collection("users").document(userEmail).updateData(["selfie": url])
+            }
+        }
+        
+        db.collection("users").document(userEmail).updateData([
+            "gender": viewModel.gender,
+            "username": viewModel.username,
+            "measurements.height": viewModel.height,
+            "measurements.bodyWeight": viewModel.bodyWeight,
+            "measurements.chest": viewModel.chest,
+            "measurements.shoulderWidth": viewModel.shoulderWidth,
+            "measurements.armLength": viewModel.armLength,
+            "measurements.waist": viewModel.waist,
+            "measurements.hips": viewModel.hips,
+            "measurements.inseam": viewModel.inseam,
+            "measurements.shoeSize": viewModel.shoeSize,
+        ]) { _ in
+            if oldUsername != viewModel.username && !oldUsername.isEmpty {
+                firestoreManager.updateUsernameEverywhere(email: userEmail, oldUsername: oldUsername, newUsername: viewModel.username)
+            }
+            print("Profile saved. Avatar generation must be triggered from Closet.")
+        }
+    }
+}
+
+// MARK: - Subcomponents
+
+struct MeasurementCallout: View {
+    let label: String
+    @Binding var value: Double
+    let unit: String
+    let alignment: HorizontalAlignment
+    
+    var body: some View {
+        // WRAPPED IN MENU TO MAKE IT CLICKABLE
+        Menu {
+            Picker(label, selection: $value) {
+                ForEach(Array(stride(from: 1, through: 250, by: 1)), id: \.self) { num in
+                    Text("\(num) \(unit)").tag(Double(num))
+                }
+            }
+        } label: {
+            HStack(spacing: 0) {
+                if alignment == .trailing {
+                    Rectangle().fill(Color.secondary.opacity(0.4)).frame(width: 35, height: 1)
                 }
                 
-                VStack(spacing: 12) {
-                    //Updated Selfie
-                    Button(action: {
-                        print("Selfie tapped")
-                        showImagePicker = true
-                    }) {
-                        Text(selectedSelfie == nil ? "Take Selfie" : "Retake Selfie")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(fitPickGold)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(fitPickGold.opacity(0.1))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
-                            .cornerRadius(12)
-                    }
-                    .sheet(isPresented: $showImagePicker) {
-                        FaceCaptureView(selectedImage: $selectedSelfie)
-                    }
-                    
-                    Button(action: {
-                        print("Saved Profile for: \(username)")
-                        guard let userEmail = session.email, !userEmail.isEmpty else {
-                                print("Save Failed: session.email is nil")
-                                return
-                            }
-                        
-                        // Capture the existing username from the manager before we overwrite it
-                        // This is required to find and remove the old name from 'likedByNames' arrays
-                        let oldUsername = firestoreManager.currentUserData?.username ?? ""
-                        let newUsername = username
-                        
-                        let db = Firestore.firestore()
-                        
-                        //Save in Storage + Firestore
-                        if let selfie = selectedSelfie {
-                            //Update Storage path
-                            storageManager.uploadSelfie(email: userEmail, selfie: selfie) { downloadURL in
-                                if let userEmail = session.email {
-                                    print("Current user email: \(session.email ?? "No email found")")
-                                    let userRef = db.collection("users").document(userEmail)
-                                    userRef.updateData([
-                                        "selfie": downloadURL
-                                    ])
-                                }
-                            }
-                        }
-                        
-                        if let userEmail = session.email {
-                            print("Current user email: \(session.email ?? "No email found")")
-                            let userRef = db.collection("users").document(userEmail)
-                            userRef.updateData([
-                                "gender": gender,
-                                "username": username,
-                                "measurements.height": height,
-                                "measurements.bodyWeight": bodyWeight,
-                                "measurements.chest": chest,
-                                "measurements.shoulderWidth": shoulderWidth,
-                                "measurements.armLength": armLength,
-                                "measurements.waist": waist,
-                                "measurements.hips": hips,
-                                "measurements.inseam": inseam,
-                                "measurements.shoeSize": shoeSize,
-                            ])
-                            { error in
-                                if let error = error {
-                                    print("Error updating height: \(error.localizedDescription)")
-                                } else {
-                                    print("Successfully updated height to \(height)!")
-                                    // Update Socials Collection if username changed
-                                    // This handles both posts authored and posts liked by the user
-                                    if oldUsername != newUsername && !oldUsername.isEmpty {
-                                        firestoreManager.updateUsernameEverywhere(
-                                            email: userEmail,
-                                            oldUsername: oldUsername,
-                                            newUsername: newUsername
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                                        
-                        
-                    }) {
-                        Text("Save")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(username.isEmpty ? Color.gray.opacity(0.5) : Color.black)
-                            .foregroundColor(.white)
-                            .cornerRadius(15)
-                    }
-                    .disabled(username.isEmpty)
+                VStack(alignment: alignment, spacing: 2) {
+                    Text(label.uppercased()).font(.system(size: 8, weight: .black)).foregroundColor(.secondary)
+                    Text("\(Int(value))\(unit)").font(.system(size: 15, weight: .bold, design: .monospaced)).foregroundColor(.primary)
                 }
-                .padding(.horizontal)
-                .padding(.vertical)
-                .padding(.bottom, 20)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(.systemBackground)).shadow(color: .black.opacity(0.1), radius: 3))
+
+                if alignment == .leading {
+                    Rectangle().fill(Color.secondary.opacity(0.4)).frame(width: 35, height: 1)
+                }
             }
         }
     }
 }
 
-struct MeasurementLine: View {
-    let label: String
-    @Binding var value: Double
-    let unit: String
-    let isVertical: Bool
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Menu {
-                Picker(label, selection: $value) {
-                    ForEach(Array(stride(from: 1, through: 250, by: 1)), id: \.self) { num in
-                        Text("\(num) \(unit)").tag(Double(num))
-                    }
-                }
-            } label: {
-                VStack(spacing: 0) {
-                    Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary).textCase(.uppercase)
-                    Text("\(Int(value))").font(.system(size: 12, weight: .bold)).foregroundColor(.blue)
-                }
-                .padding(4)
-                .background(Color.white.opacity(0.9))
-                .cornerRadius(6)
-            }
-
-            if isVertical {
-                VStack(spacing: 0) {
-                    Rectangle().frame(width: 8, height: 1.5)
-                    Rectangle().frame(width: 1.5, height: .infinity)
-                    Rectangle().frame(width: 8, height: 1.5)
-                }
-                .foregroundColor(.blue.opacity(0.5))
-            } else {
-                HStack(spacing: 0) {
-                    Rectangle().frame(width: 1.5, height: 8)
-                    Rectangle().frame(width: .infinity, height: 1.5)
-                    Rectangle().frame(width: 1.5, height: 8)
-                }
-                .foregroundColor(.blue.opacity(0.5))
-            }
-        }
+struct DashedLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.midY))
+        return path
     }
 }
 
@@ -287,70 +221,25 @@ struct StatBox: View {
     let label: String
     @Binding var value: Double
     let unit: String
+    let icon: String
     
     var body: some View {
         Menu {
             Picker(label, selection: $value) {
-                ForEach(1...200, id: \.self) { num in
+                ForEach(1...250, id: \.self) { num in
                     Text("\(num) \(unit)").tag(Double(num))
                 }
             }
         } label: {
-            VStack(alignment: .leading) {
-                Text(label).font(.caption2).bold().foregroundColor(.secondary)
-                Text("\(Int(value))\(unit)").font(.subheadline).bold().foregroundColor(.primary)
+            HStack {
+                Image(systemName: icon).foregroundColor(Color("fitPickGold"))
+                VStack(alignment: .leading) {
+                    Text(label).font(.caption2).bold().foregroundColor(.secondary)
+                    Text("\(Int(value))\(unit)").font(.subheadline).bold().foregroundColor(.primary)
+                }
+                Spacer()
             }
-            .padding(10)
-            .frame(width: 80)
-            .background(BlurView(style: .systemUltraThinMaterial))
-            .cornerRadius(10)
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.2)))
+            .padding().background(Color(.secondarySystemBackground)).cornerRadius(12)
         }
     }
 }
-
-struct BlurView: UIViewRepresentable {
-    var style: UIBlurEffect.Style
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        UIVisualEffectView(effect: UIBlurEffect(style: style))
-    }
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
-}
-
-// UIImagePickerController setup for camera
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
-    @Environment(\.presentationMode) var presentationMode
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        let parent: ImagePicker
-
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            parent.image = info[.originalImage] as? UIImage
-            parent.presentationMode.wrappedValue.dismiss()
-        }
-    }
-}
-
-#Preview {
-    BodyMeasurementView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
-}
-
-

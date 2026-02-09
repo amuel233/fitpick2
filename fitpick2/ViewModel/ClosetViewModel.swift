@@ -255,13 +255,18 @@ class ClosetViewModel: ObservableObject {
             currentItemsUsed = Array(selectedItemIDs)
         }
         
-        guard let userEmail = Auth.auth().currentUser?.email else { return }
+        // ALWAYS pull the avatar for the person currently holding the phone
+        guard let currentUserEmail = Auth.auth().currentUser?.email else { return }
         
         do {
-            let userDoc = try await db.collection("users").document(userEmail).getDocument()
+            // Fetch the LOGGED-IN user's avatar, regardless of whose closet we are in
+            let userDoc = try await db.collection("users").document(currentUserEmail).getDocument()
             guard let avatarURLString = userDoc.data()?["avatarURL"] as? String,
                   let avatarURL = URL(string: avatarURLString) else {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please generate an avatar first." }
+                await MainActor.run {
+                    isGeneratingTryOn = false
+                    tryOnMessage = "Please generate your own avatar in your closet first."
+                }
                 return
             }
             
@@ -407,5 +412,37 @@ class ClosetViewModel: ObservableObject {
                 DispatchQueue.main.async { self?.userGender = gender }
             }
         }
+    }
+    
+    func fetchClothes(for email: String) {
+        self.clothingItems = [] // Clear current list to show loading state
+        
+        // Using "ownerEmail" to match the key used in startFirestoreListener and uploadAndCategorize
+        db.collection("clothes")
+            .whereField("ownerEmail", isEqualTo: email)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("Error fetching peer's clothes: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                // Perform the update on the main thread since clothingItems is @Published
+                DispatchQueue.main.async {
+                    self?.clothingItems = documents.compactMap { doc -> ClothingItem? in
+                        let data = doc.data()
+                        
+                        return ClothingItem(
+                            id: doc.documentID,
+                            image: Image(systemName: "photo"),
+                            uiImage: nil,
+                            category: ClothingCategory(rawValue: data["category"] as? String ?? "") ?? .top,
+                            subCategory: data["subcategory"] as? String ?? "Other",
+                            remoteURL: data["imageURL"] as? String ?? ""
+                        )
+                    }
+                }
+            }
     }
 }

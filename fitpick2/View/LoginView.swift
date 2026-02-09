@@ -1,5 +1,5 @@
 //
-//  Login.swift
+//  LoginView.swift
 //  fitpick2
 //
 //  Created by Amuel Ryco Nidoy on 1/20/26.
@@ -18,14 +18,15 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     
-    // Logo Colors derived from your branding
+    // Updated Theme Colors
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
+    let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255) // Clean off-white
+    let fitPickText = Color(red: 26/255, green: 26/255, blue: 27/255)   // Dark gray/black for text
 
     var body: some View {
         ZStack {
-            // Apply the theme background
-            Color(red: 26/255, green: 26/255, blue: 27/255).ignoresSafeArea()
+            // Background changed to White
+            fitPickWhite.ignoresSafeArea()
             
             VStack(spacing: 25) {
                 // Header section with Logo and Title
@@ -35,36 +36,45 @@ struct LoginView: View {
                         .scaledToFit()
                         .frame(width: 120, height: 120)
                         .cornerRadius(24)
+                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
                     
                     Text("FitPick")
                         .font(.system(size: 40, weight: .black, design: .rounded))
-                        .foregroundColor(fitPickGold)
+                        .foregroundColor(fitPickGold) // Text changed to dark
                     
                     Text("Your AI Stylist")
                         .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary) // Adjusted for light theme
                 }
                 .padding(.top, 40)
 
-                // Input Fields with dark theme styling
+                // Input Fields with light theme styling
                 VStack(spacing: 15) {
                     TextField("", text: $email, prompt: Text("Email").foregroundColor(.gray))
                         .padding()
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white) // White background for inputs
                         .cornerRadius(12)
-                        .foregroundColor(.white)
+                        .foregroundColor(fitPickText) // Dark text input
                         .autocapitalization(.none)
                         .keyboardType(.emailAddress)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
                     
                     SecureField("", text: $password, prompt: Text("Password").foregroundColor(.gray))
                         .padding()
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.white) // White background for inputs
                         .cornerRadius(12)
-                        .foregroundColor(.white)
+                        .foregroundColor(fitPickText) // Dark text input
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
                 }
                 .padding(.horizontal)
 
-                // Primary Login Button using Brand Gold
+                // Primary Login Button
                 Button(action: {
                     auth.login(email: email, password: password)
                 }) {
@@ -73,7 +83,7 @@ struct LoginView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(fitPickGold)
-                        .foregroundColor(.black)
+                        .foregroundColor(.white) // White text on gold for better contrast
                         .cornerRadius(12)
                 }
                 .padding(.horizontal)
@@ -94,6 +104,7 @@ struct LoginView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .foregroundColor(fitPickGold)
+                    .background(Color.white)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(fitPickGold, lineWidth: 1)
@@ -101,7 +112,7 @@ struct LoginView: View {
                 }
                 .padding(.horizontal)
 
-                // Face ID Section - Only visible if user has logged in successfully before
+                // Face ID Section
                 if auth.hasLoggedInBefore {
                     Button(action: {
                         auth.loginWithBiometrics()
@@ -120,7 +131,6 @@ struct LoginView: View {
                 Spacer()
             }
         }
-        // Centralized Error Alert
         .alert("Login Failed", isPresented: $auth.showErrorAlert) {
             Button("OK", role: .cancel) { }
         } message: {

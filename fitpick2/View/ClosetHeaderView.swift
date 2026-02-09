@@ -23,6 +23,9 @@ struct ClosetHeaderView: View {
     var isSaving: Bool = false
     var isSaved: Bool = false
     
+    // Property to distinguish owner vs guest
+    var isGuest: Bool = false
+    
     private let db = Firestore.firestore()
     
     var body: some View {
@@ -70,25 +73,13 @@ struct ClosetHeaderView: View {
                 // --- FLOATING BUTTONS (Top Right) ---
                 VStack(spacing: 12) {
                     
-                    // 1. SAVE BUTTON
-                    if tryOnImage != nil {
-                        Button(action: {
-                            if !isSaved { onSave?() }
-                        }) {
+                    // 1. SAVE BUTTON (Only show if NOT a guest)
+                    if tryOnImage != nil && !isGuest {
+                        Button(action: { if !isSaved { onSave?() } }) {
                             Circle()
                                 .fill(isSaved ? Color.green : Color.white)
                                 .frame(width: 40, height: 40)
-                                .overlay(
-                                    Group {
-                                        if isSaving {
-                                            ProgressView()
-                                        } else if isSaved {
-                                            Image(systemName: "checkmark").font(.system(size: 16, weight: .bold)).foregroundColor(.white)
-                                        } else {
-                                            Image(systemName: "arrow.down.to.line").font(.system(size: 16, weight: .bold)).foregroundColor(.primary)
-                                        }
-                                    }
-                                )
+                                .overlay(saveButtonIcon)
                                 .shadow(radius: 4)
                         }
                         .disabled(isSaving || isSaved)
@@ -108,20 +99,13 @@ struct ClosetHeaderView: View {
                         }
                     }
                     
-                    // 3. GENERATE BUTTON
-                    if tryOnImage == nil && tryOnMessage == nil {
-                        Button(action: {
-                            Task { await bodyVM.generateAndSaveAvatar() }
-                        }) {
+                    // 3. GENERATE BUTTON (HIDDEN FOR GUESTS)
+                    if !isGuest && tryOnImage == nil && tryOnMessage == nil {
+                        Button(action: { Task { await bodyVM.generateAndSaveAvatar() } }) {
                             Circle()
                                 .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
                                 .frame(width: 40, height: 40)
-                                .overlay(
-                                    Group {
-                                        if bodyVM.isGenerating { ProgressView().tint(.white) }
-                                        else { Image(systemName: "sparkles").font(.system(size: 16, weight: .bold)).foregroundColor(.white) }
-                                    }
-                                )
+                                .overlay(generateButtonIcon)
                                 .shadow(radius: 4)
                         }
                         .disabled(bodyVM.isGenerating)
@@ -134,6 +118,22 @@ struct ClosetHeaderView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .onAppear { fetchAvatarURL() }
+    }
+    
+    // Helper for icons to keep body clean
+    private var saveButtonIcon: some View {
+        Group {
+            if isSaving { ProgressView() }
+            else if isSaved { Image(systemName: "checkmark").foregroundColor(.white) }
+            else { Image(systemName: "arrow.down.to.line").foregroundColor(.primary) }
+        }
+    }
+
+    private var generateButtonIcon: some View {
+        Group {
+            if bodyVM.isGenerating { ProgressView().tint(.white) }
+            else { Image(systemName: "sparkles").foregroundColor(.white) }
+        }
     }
     
     private var defaultPlaceholder: some View {
