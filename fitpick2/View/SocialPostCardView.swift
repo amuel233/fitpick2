@@ -22,6 +22,7 @@ struct SocialPostCardView: View {
     @State private var generatedImage: UIImage?
     @State private var isShowingPopup = false
     @State private var isProcessing = false
+    @State private var showingDeleteAlert = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
