@@ -6,6 +6,7 @@
 //
 
 import FirebaseFirestore
+import FirebaseStorage
 import FirebaseAuth
 import SwiftUI
 
@@ -15,6 +16,8 @@ class FirestoreManager: ObservableObject {
     
     @Published var users = [User]()
     @Published var posts: [SocialsPost] = []
+    @Published var followersList: [User] = []
+    @Published var followingList: [User] = []
     
     @Published var currentEmail: String? = Auth.auth().currentUser?.email
     @Published var currentUserData: User?
@@ -23,6 +26,8 @@ class FirestoreManager: ObservableObject {
         fetchSocialPosts()
         if let email = currentEmail {
             startCurrentUserListener(email: email)
+            fetchFollowers() // Fetch followers list on startup
+            fetchFollowing() // Fetch following list on startup
         }
     }
     
@@ -247,6 +252,27 @@ class FirestoreManager: ObservableObject {
         ]
         db.collection("socials").document(uniqueID).setData(postData)
     }
+    
+    func deletePost(post: SocialsPost) {
+        // 1. Delete the image from Firebase Storage first
+        let storageRef = Storage.storage().reference(forURL: post.imageUrl)
+        
+        storageRef.delete { [weak self] error in
+            if let error = error {
+                print("Error deleting image from storage: \(error.localizedDescription)")
+                // Even if storage fails (e.g. image already gone), we usually proceed to delete the doc
+            }
+            
+            // 2. Delete the document from Firestore
+            self?.db.collection("social_posts").document(post.id).delete() { error in
+                if let error = error {
+                    print("Error removing document: \(error.localizedDescription)")
+                } else {
+                    print("Post and storage successfully deleted!")
+                }
+            }
+        }
+    }
 
     func toggleLike(post: SocialsPost, userEmail: String, username: String) {
         let postRef = db.collection("socials").document(post.id)
@@ -279,6 +305,82 @@ class FirestoreManager: ObservableObject {
         } else {
             // FOLLOW: Add target email to my following list
             currentUserRef.updateData(["following": FieldValue.arrayUnion([targetEmail])])
+        }
+    }
+    
+    func fetchFollowers() {
+        guard let currentEmail = Auth.auth().currentUser?.email else { return }
+        
+        // We search for all users whose 'following' array contains the current user's email
+        db.collection("users")
+            .whereField("following", arrayContains: currentEmail)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error fetching followers: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                DispatchQueue.main.async {
+                    self.followersList = documents.compactMap { doc in
+                        let data = doc.data()
+                        return User(
+                            id: doc.documentID,
+                            username: data["username"] as? String ?? "",
+                            selfie: data["selfie"] as? String ?? "",
+                            following: data["following"] as? [String] ?? []
+                        )
+                    }
+                }
+            }
+    }
+    
+    func fetchFollowing() {
+        // Get the list of emails from the current user's data
+        guard let followingEmails = currentUserData?.following, !followingEmails.isEmpty else {
+            self.followingList = []
+            return
+        }
+        
+        // Fetch user documents where the document ID (email) is in the following list
+        db.collection("users")
+            .whereField(FieldPath.documentID(), in: followingEmails)
+            .addSnapshotListener { snapshot, error in
+                if let error = error {
+                    print("Error fetching following: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else { return }
+                
+                DispatchQueue.main.async {
+                    self.followingList = documents.compactMap { doc in
+                        let data = doc.data()
+                        return User(
+                            id: doc.documentID,
+                            username: data["username"] as? String ?? "",
+                            selfie: data["selfie"] as? String ?? "",
+                            following: data["following"] as? [String] ?? []
+                        )
+                    }
+                }
+            }
+    }
+    
+    func removeFollower(followerEmail: String) {
+        guard let currentEmail = currentEmail else { return }
+        
+        // We go to the FOLLOWER'S document and remove OUR email from their 'following' list
+        db.collection("users").document(followerEmail).updateData([
+            "following": FieldValue.arrayRemove([currentEmail])
+        ]) { error in
+            if let error = error {
+                print("Error removing follower: \(error.localizedDescription)")
+            } else {
+                print("Follower successfully removed.")
+                // The snapshot listener in fetchFollowers() will automatically update the UI
+            }
         }
     }
     

@@ -13,6 +13,7 @@ struct SocialPostCardView: View {
     
     @ObservedObject var firestoreManager: FirestoreManager
     @State private var isExpanded: Bool = false
+    @State private var showingDeleteAlert = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,7 +28,7 @@ struct SocialPostCardView: View {
                 NavigationLink(destination: ClosetView(targetUserEmail: targetEmail, targetUsername: post.username)) {
                     Text(post.username)
                         .font(.headline)
-                        .foregroundColor(isFollowing ? goldColor : goldColor)
+                        .foregroundColor(goldColor)
                         // Ensure the text area is clickable even on transparent parts
                         .contentShape(Rectangle())
                 }
@@ -37,8 +38,19 @@ struct SocialPostCardView: View {
                 
                 Spacer()
                 
-                // Follow Button (Logic remains the same)
-                if myEmail != targetEmail {
+                // Action Buttons: Delete for owner, Follow/Unfollow for others
+                if myEmail == targetEmail {
+                    // DELETE BUTTON: Only visible if you are the owner
+                    Button(action: { showingDeleteAlert = true }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14))
+                            .foregroundColor(goldColor.opacity(0.8))
+                            .padding(8)
+                            .background(goldColor.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                } else {
+                    // Follow Button
                     Button(action: {
                         firestoreManager.toggleFollow(
                             currentEmail: myEmail,
@@ -58,14 +70,12 @@ struct SocialPostCardView: View {
                 }
             }
             .padding(.horizontal)
-//            .zIndex(10)
             
             // --- IMAGE SECTION ---
             ZStack(alignment: .topTrailing) {
                 AsyncImage(url: URL(string: post.imageUrl)) { phase in
                     switch phase {
                     case .empty:
-                        // This shows WHILE the image is downloading
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.gray.opacity(0.1))
@@ -81,7 +91,6 @@ struct SocialPostCardView: View {
                         .frame(width: UIScreen.main.bounds.width - 32, height: 400)
                         
                     case .success(let image):
-                        // This shows when the image is READY
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -90,7 +99,6 @@ struct SocialPostCardView: View {
                             .cornerRadius(12)
                             
                     case .failure:
-                        // This shows if the link is broken or internet fails
                         ZStack {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(goldColor.opacity(0.1))
@@ -113,7 +121,6 @@ struct SocialPostCardView: View {
                 // AI Button
                 Button(action: {
                     print("AI Try On Triggered")
-                    // TODO: ADD LOGIC HERE
                 }) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 18, weight: .bold))
@@ -164,6 +171,15 @@ struct SocialPostCardView: View {
             .padding(.horizontal)
         }
         .padding(.vertical, 10)
+        // DELETE CONFIRMATION ALERT
+        .alert("Delete Post?", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                firestoreManager.deletePost(post: post)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will permanently remove your post and the photo from FitPick.")
+        }
     }
     
     private var instagramStyleLikedView: Text {
