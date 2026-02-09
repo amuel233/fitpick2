@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
+import FirebaseAILogic
+import UIKit
 
 struct SocialPostCardView: View {
     let post: SocialsPost
@@ -13,6 +16,12 @@ struct SocialPostCardView: View {
     
     @ObservedObject var firestoreManager: FirestoreManager
     @State private var isExpanded: Bool = false
+    @State private var avatarURL: String?
+    @EnvironmentObject var session: UserSession
+    
+    @State private var generatedImage: UIImage?
+    @State private var isShowingPopup = false
+    @State private var isProcessing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -116,6 +125,11 @@ struct SocialPostCardView: View {
                 Button(action: {
                     print("AI Try On Triggered")
                     // TODO: ADD LOGIC HERE
+                    
+                    Task {
+                            await tryFit()
+                        }
+                    
                 }) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 18, weight: .bold))
@@ -126,8 +140,29 @@ struct SocialPostCardView: View {
                         .shadow(radius: 5)
                 }
                 .padding(12)
+                .disabled(isProcessing)
             }
             .padding(.horizontal)
+            .sheet(isPresented: $isShowingPopup) {
+                        VStack {
+                            Text("AI Generated Result")
+                                .font(.headline)
+                                .padding()
+                            
+                            if let uiImage = generatedImage {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: 300)
+                                    .cornerRadius(12)
+                            }
+                            
+                            Button("Close") {
+                                isShowingPopup = false
+                            }
+                            .padding()
+                        }
+                    }.animation(.default, value: isProcessing)
 
             // --- INTERACTION SECTION ---
             VStack(alignment: .leading, spacing: 8) {
@@ -175,5 +210,122 @@ struct SocialPostCardView: View {
         if names.count == 1 { return Text("Liked by ") + Text(names[0]).bold() }
         let otherCount = totalLikes - 1
         return Text("Liked by ") + Text(names.last ?? "").bold() + Text(" and ") + Text("\(otherCount) \(otherCount == 1 ? "other" : "others")").bold()
+    }
+    
+    func tryFit () async {
+
+        let avatarURLx = await fetchAvatarURL(for: session.email ?? "")
+        guard let avatartImage = await downloadImage(from: avatarURLx) else { return }
+        
+        let postID = post.id
+        let postURL = await fetchPostURL(for: postID)
+        guard let postImage = await downloadImage(from: postURL) else { return }
+                
+        if let imageURL = postURL {
+            print("Success! Image found: \(imageURL)")
+            // Update your UI state here
+        }
+        await tryFitWithAI(avatarURL: avatartImage, postURL: postImage)
+    }
+    
+    @MainActor
+    func tryFitWithAI(avatarURL: UIImage, postURL: UIImage) async {
+        
+            isProcessing = true
+            let task = Task { () -> UIImage? in
+            let ai = FirebaseAI.firebaseAI(backend: .googleAI())
+            let model = ai.imagenModel(modelName: "imagen-4.0-generate-001")
+            
+            let prompt = """
+            
+            Persona: You are an expert Virtual Stylist and Image Synthesis engine.
+            Task: Perform a 3D "Virtual Try-On" by transferring clothing from a source image to a target subject.
+            Steps:
+            1. Analyze Source: Extract the complete outfit (including texture, fabric, and fit) from the person in this image: \(postURL), and convert it to 3D.
+            2. Analyze Target: Identify the person (the "Avatar") in this image: \(avatarURL). Maintain their physical identity, and body proportions exactly.
+            3. Execution: Generate a new image where the Avatar from \(avatarURL) is wearing the exact outfit extracted from \(postURL). Ensure the clothing drapes naturally according to the Avatar's pose. Explicitly only generate the image of the user wearing the exact outfit.
+            """
+                
+            do {
+                // 2. 'model' is created and used ONLY here, so it never "crosses" actors
+                let response = try await model.generateImages(prompt: prompt)
+                
+                guard let data = response.images.first?.data else { return nil }
+                return UIImage(data: data)
+            } catch {
+                print("Generation error: \(error)")
+                return nil
+            }
+        }
+                if let uiImage = await task.value {
+                    self.generatedImage = uiImage
+                    self.isShowingPopup = true
+                }
+            isProcessing = false
+        }
+
+      
+    func downloadImage(from urlString: String?) async -> UIImage? {
+        // 1. Safety check: make sure the URL string isn't empty
+        guard let urlString = urlString, let url = URL(string: urlString) else {
+            return nil
+        }
+        
+        do {
+            // 2. Fetch the data from the URL
+            let (data, _) = try await URLSession.shared.data(from: url)
+            
+            // 3. Convert data to a UIImage
+            return UIImage(data: data)
+        } catch {
+            print("Error downloading image: \(error)")
+            return nil
+        }
+    }
+    
+    func fetchAvatarURL(for email: String) async -> String? {
+        
+        let db = Firestore.firestore()
+            // Reference: users -> [email]
+        let docRef = db.collection("users").document(email)
+            
+            do {
+                let document = try await docRef.getDocument()
+                
+                if document.exists {
+                    // Extract the avatarURL field as a String
+                    let data = document.data()
+                    let avatarURL = data?["avatarURL"] as? String
+                    return avatarURL
+                } else {
+                    print("Document does not exist")
+                    return nil
+                }
+            } catch {
+                print("Error fetching document: \(error)")
+                return nil
+            }
+        }
+    
+    func fetchPostURL(for postID: String) async -> String? {
+        
+        let db = Firestore.firestore()
+        let docRef = db.collection("socials").document(postID)
+        do {
+            let document = try await docRef.getDocument()
+            
+            if document.exists {
+                // In this collection, the field is named "imageUrl"
+                let data = document.data()
+                return data?["imageUrl"] as? String ?? ""
+            } else {
+                print("Social post not found")
+                return nil
+            }
+        } catch {
+            print("Error fetching post: \(error)")
+            return nil
+        }
+        
     }
 }
