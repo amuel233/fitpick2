@@ -16,14 +16,39 @@ struct SocialsView: View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
-                    HStack {
-                        Text("Feed")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
-                            .foregroundColor(fitPickGold)
+                    // MARK: - Header with Follower Counts
+                    HStack(alignment: .lastTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Feed")
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
+                                .foregroundColor(fitPickGold)
+                            
+                            // Tapping this navigates to the Followers/Following list
+                            NavigationLink(destination: SocialConnectionsView(firestoreManager: firestoreManager)) {
+                                HStack(spacing: 15) {
+                                    HStack(spacing: 4) {
+                                        Text("\(firestoreManager.followersList.count)")
+                                            .fontWeight(.bold)
+                                        Text("Followers")
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    HStack(spacing: 4) {
+                                        Text("\(firestoreManager.currentUserData?.following.count ?? 0)")
+                                            .fontWeight(.bold)
+                                        Text("Following")
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .font(.system(size: 14, design: .rounded))
+                            }
+                            .buttonStyle(.plain)
+                        }
                         Spacer()
                     }
                     .padding()
 
+                    // MARK: - Posts Feed
                     ScrollView {
                         LazyVStack(spacing: 20) {
                             ForEach(firestoreManager.posts) { post in
@@ -35,17 +60,28 @@ struct SocialsView: View {
                             }
                         }
                     }
-                    .refreshable { firestoreManager.fetchSocialPosts() }
+                    .refreshable {
+                        firestoreManager.fetchSocialPosts()
+                        firestoreManager.fetchFollowers()
+                        firestoreManager.fetchFollowing()
+                    }
                 }
                 
                 // Upload Button
                 Button(action: { isShowingUpload = true }) {
-                    Image(systemName: "plus").font(.title.bold()).foregroundColor(.black)
-                        .frame(width: 60, height: 60).background(fitPickGold).clipShape(Circle())
+                    Image(systemName: "plus")
+                        .font(.title.bold())
+                        .foregroundColor(.black)
+                        .frame(width: 60, height: 60)
+                        .background(fitPickGold)
+                        .clipShape(Circle())
+                        .shadow(radius: 4)
                 }
                 .padding(25)
             }
-            .fullScreenCover(isPresented: $isShowingUpload) { UploadPostView() }
+            .fullScreenCover(isPresented: $isShowingUpload) {
+                UploadPostView()
+            }
         }
     }
 }

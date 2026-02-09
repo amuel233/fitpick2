@@ -40,7 +40,7 @@ struct LoginView: View {
                     
                     Text("FitPick")
                         .font(.system(size: 40, weight: .black, design: .rounded))
-                        .foregroundColor(fitPickText) // Text changed to dark
+                        .foregroundColor(fitPickGold) // Text changed to dark
                     
                     Text("Your AI Stylist")
                         .font(.subheadline)
