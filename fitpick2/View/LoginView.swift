@@ -34,7 +34,7 @@ struct LoginView: View {
                     Image("icon-1024")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 120, height: 120)
+                        .frame(width: 120, height: 80)
                         .cornerRadius(24)
                         .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
                     

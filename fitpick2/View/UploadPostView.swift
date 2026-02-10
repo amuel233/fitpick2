@@ -8,6 +8,7 @@
 import SwiftUI
 import PhotosUI
 import FirebaseFirestore
+import FirebaseAuth
 
 struct UploadPostView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
@@ -24,6 +25,10 @@ struct UploadPostView: View {
     // Preview States
     @State private var showPreview = false
     @State private var finalRenderedImage: UIImage? = nil
+    
+    // Wardrobe Tagging States [New]
+    @State private var selectedWardrobeItems: Set<String> = []
+    @State private var showWardrobePicker = false
     
     @EnvironmentObject var session: UserSession
     @Environment(\.dismiss) var dismiss
@@ -48,18 +53,17 @@ struct UploadPostView: View {
             }
         }
         .frame(width: 400, height: 400)
-        .background(Color.white) // Base for the image container
+        .background(Color.white)
         .clipped()
     }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Main Background
                 fitPickWhite.ignoresSafeArea()
                 .onTapGesture {
-                            hideKeyboard()
-                        }
+                    hideKeyboard()
+                }
                 
                 VStack(spacing: 0) {
                     // Image Section
@@ -99,7 +103,24 @@ struct UploadPostView: View {
                         handleImageSelection(newValue)
                     }
 
-                    // Caption Field - Adjusted for light theme
+                    // Wardrobe Tagging Button [New]
+                    if postImage != nil {
+                        Button(action: { showWardrobePicker = true }) {
+                            HStack {
+                                Image(systemName: "tag.fill")
+                                Text(selectedWardrobeItems.isEmpty ? "Tag items from your closet" : "\(selectedWardrobeItems.count) Items Tagged")
+                                    .fontWeight(.medium)
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(fitPickGold.opacity(0.1))
+                            .foregroundColor(fitPickGold)
+                            .cornerRadius(20)
+                        }
+                        .padding(.top, 15)
+                    }
+
+                    // Caption Field
                     TextField(
                         "",
                         text: $caption,
@@ -116,7 +137,7 @@ struct UploadPostView: View {
                             .stroke(Color.gray.opacity(0.15), lineWidth: 1)
                     )
                     .padding(.horizontal)
-                    .padding(.top, 20)
+                    .padding(.top, 15)
 
                     // Preview & Share Button
                     if isUploading {
@@ -126,14 +147,14 @@ struct UploadPostView: View {
                         Button(action: generatePreview) {
                             Text("Preview & Share")
                                 .font(.headline)
-                                .foregroundColor(.white) // White text on gold
+                                .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(postImage == nil || caption.isEmpty ? Color.gray.opacity(0.3) : fitPickGold)
                                 .cornerRadius(12)
                         }
                         .padding(.horizontal)
-                        .padding(.top, 25)
+                        .padding(.top, 20)
                         .disabled(postImage == nil || caption.isEmpty)
                     }
                     
@@ -154,10 +175,15 @@ struct UploadPostView: View {
             .sheet(isPresented: $showPreview) {
                 previewSheetContent
             }
+            // Closet Picker Sheet [New]
+            .sheet(isPresented: $showWardrobePicker) {
+                WardrobeSelectorView(selectedItems: $selectedWardrobeItems)
+            }
         }
     }
 }
 
+// MARK: - Extensions
 extension UploadPostView {
     
     func hideKeyboard() {
@@ -167,7 +193,11 @@ extension UploadPostView {
     private var controlsOverlay: some View {
         VStack {
             HStack {
-                Button(action: { postImage = nil; selectedItem = nil }) {
+                Button(action: {
+                    postImage = nil
+                    selectedItem = nil
+                    selectedWardrobeItems.removeAll() // Clear tags if image is removed
+                }) {
                     Image(systemName: "xmark.circle.fill").background(Circle().fill(Color.white))
                 }
                 Spacer()
@@ -214,10 +244,18 @@ extension UploadPostView {
                 }
                 
                 ScrollView {
-                    Text(caption)
-                        .font(.subheadline)
-                        .foregroundColor(fitPickText.opacity(0.8))
-                        .multilineTextAlignment(.center)
+                    VStack(alignment: .center, spacing: 8) {
+                        Text(caption)
+                            .font(.subheadline)
+                            .foregroundColor(fitPickText.opacity(0.8))
+                        
+                        if !selectedWardrobeItems.isEmpty {
+                            Text("\(selectedWardrobeItems.count) items tagged from closet")
+                                .font(.caption)
+                                .foregroundColor(fitPickGold)
+                                .italic()
+                        }
+                    }
                 }
                 .frame(maxHeight: 100)
                 
@@ -240,8 +278,6 @@ extension UploadPostView {
         .presentationDetents([.medium])
     }
 
-    // ... (rest of functions like resetPosition, handleImageSelection, generatePreview, and uploadPost remain the same)
-    
     func resetPosition() {
         scale = 1.0; lastScale = 1.0; offset = .zero; lastOffset = .zero
     }
@@ -282,6 +318,7 @@ extension UploadPostView {
                 "username": session.username,
                 "caption": caption,
                 "imageUrl": url,
+                "taggedClothesIds": Array(selectedWardrobeItems), // Save URLs of closet items
                 "likes": 0,
                 "likedBy": [],
                 "likedByNames": [],
