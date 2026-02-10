@@ -95,38 +95,44 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    /// Fetch number of clothes uploaded in the last `days` and how many of those were used in socials posts in the same period.
+    // Fetch number of clothes uploaded in the last 7 days and how many of those were specifically tagged in socials posts during that same period.
     func fetchWardrobePulse(lastDays: Int = 7, completion: @escaping (_ totalUploaded: Int, _ usedCount: Int) -> Void) {
         guard let userEmail = Auth.auth().currentUser?.email else { completion(0,0); return }
-
         let since = Date().addingTimeInterval(TimeInterval(-lastDays * 24 * 60 * 60))
 
-        // 1) fetch clothes uploaded in the last `lastDays`
+        // Get the Document IDs of clothes uploaded in the last 7 days
         db.collection("clothes")
             .whereField("ownerEmail", isEqualTo: userEmail)
             .whereField("createdat", isGreaterThan: Timestamp(date: since))
-            .getDocuments { clothesSnap, err in
-                guard let clothesDocs = clothesSnap?.documents else {
-                    completion(0,0); return
-                }
+            .getDocuments { clothesSnap, _ in
+                let docs = clothesSnap?.documents ?? []
+                let uploadedCount = docs.count
+                
+                // Collect the Document IDs (doc.documentID)
+                let newClothesIDs = Set(docs.map { $0.documentID })
 
-                let uploaded = clothesDocs.count
-                // collect image URLs from clothes
-                let imageURLs: Set<String> = Set(clothesDocs.compactMap { $0.data()["imageURL"] as? String })
-
-                // 2) fetch socials by user in same timeframe
+                print("Pulse Debug: Found \(uploadedCount) new clothes.")
+                
+                // Get social posts from the last 7 days
                 self.db.collection("socials")
                     .whereField("userEmail", isEqualTo: userEmail)
                     .whereField("timestamp", isGreaterThan: Timestamp(date: since))
                     .getDocuments { postsSnap, _ in
-                        var used = 0
-                        if let posts = postsSnap?.documents {
-                            let postUrls = posts.compactMap { $0.data()["imageUrl"] as? String }
-                            for u in imageURLs {
-                                if postUrls.contains(u) { used += 1 }
+                        var uniqueUsedIDs = Set<String>()
+                        
+                        postsSnap?.documents.forEach { doc in
+                            // 3. Check the array of IDs tagged in this post
+                            if let taggedIDs = doc.data()["taggedClothesIds"] as? [String] {
+                                for idFromPost in taggedIDs {
+                                    // 4. Match the Post's Tagged ID against our New Clothes IDs
+                                    if newClothesIDs.contains(idFromPost) {
+                                        uniqueUsedIDs.insert(idFromPost)
+                                    }
+                                }
                             }
                         }
-                        completion(uploaded, used)
+                        print("Pulse Debug: Found \(uniqueUsedIDs.count) tagged items matching new clothes.")
+                        completion(uploadedCount, uniqueUsedIDs.count)
                     }
             }
     }
@@ -233,24 +239,6 @@ class FirestoreManager: ObservableObject {
                     }
                 }
             }
-    }
-
-    func uploadPost(email: String, username: String, caption: String, imageUrl: String) {
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let uniqueID = "\(email)_\(timestamp)"
-        
-        let postData: [String: Any] = [
-            "id": uniqueID,
-            "userEmail": email,
-            "username": username,
-            "caption": caption,
-            "imageUrl": imageUrl,
-            "likes": 0,
-            "likedBy": [], // Initialize with empty array
-            "comments": 0,
-            "timestamp": FieldValue.serverTimestamp()
-        ]
-        db.collection("socials").document(uniqueID).setData(postData)
     }
     
     func deletePost(post: SocialsPost) {
