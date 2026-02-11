@@ -1,5 +1,5 @@
 //
-//  Login.swift
+//  HomeView.swift
 //  fitpick2
 //
 //  Created by Amuel Ryco Nidoy on 1/20/26.
@@ -7,60 +7,75 @@
 
 import SwiftUI
 import FirebaseAILogic
+
 struct HomeView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var session: UserSession
     @State private var showCloset: Bool = false
     @StateObject private var viewModel = HomeViewModel()
 
-    // Single-column layout so each card spans full width
-    private let columns = [
-        GridItem(.flexible())
-    ]
+    let fitPickGold = Color("fitPickGold")
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.cardSpacing) {
-                    // Top area: Greeting + Agentic Header occupy full width
-                    TimeGreetingCard(greeting: viewModel.timeBasedGreeting, message: viewModel.morningBriefing, temperature: viewModel.temperatureString, location: viewModel.locationString, tryOnAvailable: viewModel.tryOnAvailable, tryOnAction: {
-                        appState.selectedTab = viewModel.closetTabIndex
-                    })
+        ScrollView {
+            VStack(spacing: Theme.cardSpacing) {
+                
+                // MARK: - Gold & White Welcome Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Welcome back,")
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundColor(.secondary)
+                        
+                        Text("\(session.username)!")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundColor(fitPickGold)
+                    }
+                    Spacer()
+                }
+                .padding(.top, 5)
+                .padding(.horizontal, 4)
 
-                    AgenticHeader(gap: viewModel.gapDetectionMessage, isGeneratingAIPicks: viewModel.isGeneratingAIPicks, tryOnAction: {
-                        if let gap = viewModel.gapDetectionMessage, gap.useTryOn {
+                // MARK: - Dynamic Header Group
+                // This VStack specifically controls the gap between the Greeting and the AgenticHeader
+                VStack(spacing: 6) {
+                    TimeGreetingCard(
+                        greeting: viewModel.timeBasedGreeting,
+                        message: viewModel.morningBriefing,
+                        temperature: viewModel.temperatureString,
+                        location: viewModel.locationString,
+                        tryOnAvailable: viewModel.tryOnAvailable,
+                        tryOnAction: {
                             appState.selectedTab = viewModel.closetTabIndex
                         }
-                    })
+                    )
 
-                    // Responsive grid for remaining cards (adaptive columns)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: Theme.cardSpacing)], spacing: Theme.cardSpacing) {
-
-                        HStack(spacing: Theme.cardSpacing) {
-                            SmartWardrobePulse()
-                                .frame(maxWidth: .infinity)
-                            WeatherAccessoryTip()
-                                .frame(maxWidth: .infinity)
-                        }
-
-                        // Solo Sustainability card removed (CombinedWardrobeCard covers this)
-
-                        // Morning briefing card removed
-
-                        TrendingFashionNews()
+                    if viewModel.gapDetectionMessage != nil || viewModel.isGeneratingAIPicks {
+                        AgenticHeader(
+                            gap: viewModel.gapDetectionMessage,
+                            isGeneratingAIPicks: viewModel.isGeneratingAIPicks,
+                            tryOnAction: {
+                                if let gap = viewModel.gapDetectionMessage, gap.useTryOn {
+                                    appState.selectedTab = viewModel.closetTabIndex
+                                }
+                            }
+                        )
                     }
                 }
-                .padding(Theme.cardSpacing)
+
+                // Grid for secondary cards
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: Theme.cardSpacing)], spacing: Theme.cardSpacing) {
+                    HStack(spacing: Theme.cardSpacing) {
+                        SmartWardrobePulse().frame(maxWidth: .infinity)
+                        WeatherAccessoryTip().frame(maxWidth: .infinity)
+                    }
+                    TrendingFashionNews()
+                }
             }
-            .refreshable {
-                viewModel.refreshAll()
-            }
-            .navigationTitle(viewModel.navigationTitle)
-            .background(viewModel.backgroundColor.edgesIgnoringSafeArea(.all))
-            
-            NavigationLink(destination: ClosetView(), isActive: $showCloset) {
-                EmptyView()
-            }
+            .padding(Theme.cardSpacing)
         }
+        .refreshable { viewModel.refreshAll() }
+        .background(viewModel.backgroundColor.edgesIgnoringSafeArea(.all))
     }
 }
 

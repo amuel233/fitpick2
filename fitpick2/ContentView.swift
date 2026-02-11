@@ -18,7 +18,7 @@ struct RootView: View {
                 LoginView()
             }
         }
-        .animation(.easeInOut, value: appState.isLoggedIn)
+        .animation(.snappy(duration: 0.2), value: appState.isLoggedIn)
     }
 }
 
@@ -27,13 +27,16 @@ struct MainTabView: View {
     @EnvironmentObject var session: UserSession
     @StateObject private var auth = AuthManager.shared
     @State private var showLogoutModal = false
-
+    
     let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
+    let fitPickOffWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
+            fitPickOffWhite.ignoresSafeArea()
+            
             TabView(selection: $appState.selectedTab) {
+                // Each view handles its own internal navigation if needed
                 HomeView()
                     .tabItem { Label("Home", systemImage: "house") }
                     .tag(0)
@@ -49,87 +52,65 @@ struct MainTabView: View {
                 SocialsView()
                     .tabItem { Label("Socials", systemImage: "person.2") }
                     .tag(3)
-
-                // Invisible tab that acts as a trigger
-                Color.clear
-                    .tabItem { Label("Logout", systemImage: "rectangle.portrait.and.arrow.right") }
-                    .tag(4)
             }
             .accentColor(fitPickGold)
-            .onChange(of: appState.selectedTab) { _, newValue in
-                if newValue == 4 {
-                    showLogoutModal = true
+
+            // MARK: - Floating Logout Button
+            if appState.selectedTab == 0 {
+                HStack {
+                    Spacer()
+                    Button(action: { showLogoutModal = true }) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(10)
+                            .background(fitPickGold)
+                            .clipShape(Circle())
+                            .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
             }
 
-            // Custom Gold & White Logout Modal
             if showLogoutModal {
-                Color.black.opacity(0.6)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-                    .onTapGesture {
-                        closeModal()
-                    }
-
-                VStack(spacing: 20) {
-                    Image(systemName: "door.right.hand.open")
-                        .font(.system(size: 50))
-                        .foregroundColor(fitPickGold)
-                    
-                    Text("Logging out?")
-                        .font(.title2.bold())
-                        .foregroundColor(.black)
-
-                    if let email = session.email {
-                        Text(email)
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                    }
-
-                    VStack(spacing: 12) {
-                        Button(action: {
-                            appState.selectedTab = 0
-                            auth.logout()
-                        }) {
-                            Text("Confirm Logout")
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(fitPickGold)
-                                .cornerRadius(10)
-                        }
-
-                        Button(action: {
-                            closeModal()
-                        }) {
-                            Text("Cancel")
-                                .fontWeight(.semibold)
-                                .foregroundColor(fitPickGold)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(fitPickGold, lineWidth: 2)
-                                )
-                        }
-                    }
-                }
-                .padding(30)
-                .background(Color.white)
-                .cornerRadius(20)
-                .shadow(radius: 20)
-                .padding(.horizontal, 40)
-                .transition(.scale.combined(with: .opacity))
+                logoutModalOverlay
             }
         }
-        .animation(.spring(), value: showLogoutModal)
     }
 
-    private func closeModal() {
-        showLogoutModal = false
-        // Snap back to the previous tab so the logout tab isn't highlighted
-        appState.selectedTab = 0
+    private var logoutModalOverlay: some View {
+        ZStack {
+            Color.clear.ignoresSafeArea()
+                .onTapGesture { withAnimation { showLogoutModal = false } }
+
+            VStack(spacing: 25) {
+                Image(systemName: "door.right.hand.open")
+                    .font(.system(size: 60)).foregroundColor(fitPickGold)
+                
+                VStack(spacing: 8) {
+                    Text("Logging out?").font(.title.bold())
+                    if let email = session.email {
+                        Text(email).font(.subheadline).foregroundColor(.gray)
+                    }
+                }
+
+                VStack(spacing: 16) {
+                    Button("Confirm Logout") {
+                        showLogoutModal = false
+                        auth.logout()
+                    }
+                    .fontWeight(.bold).foregroundColor(.white).frame(maxWidth: .infinity)
+                    .padding().background(fitPickGold).cornerRadius(12)
+
+                    Button("Cancel") { showLogoutModal = false }
+                        .fontWeight(.semibold).foregroundColor(fitPickGold).frame(maxWidth: .infinity)
+                        .padding().overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
+                }
+                .padding(.horizontal, 40)
+            }
+            .padding(30).background(Color.white).cornerRadius(24).padding(.horizontal, 30)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
