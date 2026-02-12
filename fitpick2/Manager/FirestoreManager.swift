@@ -11,7 +11,7 @@ import FirebaseAuth
 import SwiftUI
 
 class FirestoreManager: ObservableObject {
-    private var db = Firestore.firestore()
+    private lazy var db = Firestore.firestore()
     private var listener: ListenerRegistration?
     
     @Published var users = [User]()
@@ -29,11 +29,14 @@ class FirestoreManager: ObservableObject {
     }
 
     init() {
-        fetchSocialPosts()
-        if let email = currentEmail {
-            startCurrentUserListener(email: email)
-            fetchFollowers() // Fetch followers list on startup
-            fetchFollowing() // Fetch following list on startup
+        // We wrap these in a check or delay to ensure Firebase is ready
+        DispatchQueue.main.async {
+            self.fetchSocialPosts()
+            if let email = self.currentEmail {
+                self.startCurrentUserListener(email: email)
+                self.fetchFollowers()
+                self.fetchFollowing()
+            }
         }
     }
     
@@ -141,6 +144,16 @@ class FirestoreManager: ObservableObject {
                         completion(uploadedCount, uniqueUsedIDs.count)
                     }
             }
+    }
+    
+    func checkNeedsOutfitReminder(completion: @escaping (Bool) -> Void) {
+        // Check the last 7 days of activity
+        self.fetchWardrobePulse(lastDays: 7) { totalUploaded, usedCount in
+            // Logic: If user uploaded clothes but hasn't tagged them in any posts (usedCount == 0),
+            // they might need help choosing an outfit.
+            let needsNudge = totalUploaded > 0 && usedCount == 0
+            completion(needsNudge)
+        }
     }
     
     func fetchUserMeasurements(email: String, completion: @escaping ([String: Double]?) -> Void) {

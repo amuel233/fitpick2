@@ -15,11 +15,10 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>899654800134-p2b7g759drtt306j5ksmnjl87tfth09b.apps.googleusercontent.com</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>fitPick needs access to your calendar to suggest outfits for upcoming events.</string>
-	<key>NSAppleMusicUsageDescription</key>
-	<string>fitPick may access media features for a richer experience (optional).</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>fitPick uses your location to show local temperature and better outfit suggestions.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
