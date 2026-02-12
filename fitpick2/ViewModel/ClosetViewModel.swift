@@ -244,98 +244,154 @@ class ClosetViewModel: ObservableObject {
         db.collection("clothes").document(customDocID).setData(data)
     }
 
-    // MARK: - 5. Virtual Try-On Logic
-    func generateVirtualTryOn(selectedItemIDs: Set<String>) async {
-        print("DEBUG: Starting Try-On Process...")
-        await MainActor.run {
-            isGeneratingTryOn = true
-            generatedTryOnImage = nil
-            tryOnMessage = nil
-            tryOnSavedSuccess = false
-            currentItemsUsed = Array(selectedItemIDs)
-        }
-        
-        // ALWAYS pull the avatar for the person currently holding the phone
-        guard let currentUserEmail = Auth.auth().currentUser?.email else { return }
-        
-        do {
-            // Fetch the LOGGED-IN user's avatar, regardless of whose closet we are in
-            let userDoc = try await db.collection("users").document(currentUserEmail).getDocument()
-            guard let avatarURLString = userDoc.data()?["avatarURL"] as? String,
-                  let avatarURL = URL(string: avatarURLString) else {
-                await MainActor.run {
-                    isGeneratingTryOn = false
-                    tryOnMessage = "Please generate your own avatar in your closet first."
-                }
-                return
+    // MARK: - 5. Virtual Try-On Logic (Measurement-Aware Mannequin)
+        /// Generates a "Ghost Mannequin" visualization.
+        /// - Strategy: Combines the Visual Reference (Avatar) with Quantitative Data (Measurements)
+        ///   to generate a mannequin that matches the user's exact body proportions.
+        func generateVirtualTryOn(selectedItemIDs: Set<String>) async {
+            print("DEBUG: Starting Try-On (Measurement Match Mode)...")
+            
+            // 1. Reset UI State
+            await MainActor.run {
+                isGeneratingTryOn = true
+                generatedTryOnImage = nil
+                tryOnMessage = nil
+                tryOnSavedSuccess = false
+                currentItemsUsed = Array(selectedItemIDs)
             }
             
-            let (avatarData, _) = try await URLSession.shared.data(from: avatarURL)
-            guard let rawAvatar = UIImage(data: avatarData) else { return }
-            let avatarImage = resizeImage(image: rawAvatar, targetSize: CGSize(width: 800, height: 800)) ?? rawAvatar
-
-            let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
-            let itemDescriptions = selectedClothes.map { "\($0.subCategory) (\($0.category))" }.joined(separator: ", ")
+            // 2. Auth Check
+            guard let currentUserEmail = Auth.auth().currentUser?.email else { return }
             
-            var clothingParts: [any Part] = []
-            for item in selectedClothes {
-                if let url = URL(string: item.remoteURL) {
-                    let (data, _) = try await URLSession.shared.data(from: url)
-                    if let rawImg = UIImage(data: data) {
-                        let resizedImg = resizeImage(image: rawImg, targetSize: CGSize(width: 800, height: 800)) ?? rawImg
-                        if let jpg = resizedImg.jpegData(compressionQuality: 0.6) {
-                            clothingParts.append(InlineDataPart(data: jpg, mimeType: "image/jpeg"))
+            do {
+                // 3. Fetch User Profile & Measurements
+                let userDoc = try await db.collection("users").document(currentUserEmail).getDocument()
+                let userData = userDoc.data()
+                
+                // A. Get Avatar URL (Visual Reference)
+                guard let avatarURLString = userData?["avatarURL"] as? String,
+                      let avatarURL = URL(string: avatarURLString) else {
+                    await MainActor.run {
+                        isGeneratingTryOn = false
+                        tryOnMessage = "Please generate an avatar first."
+                    }
+                    return
+                }
+                
+                // B. Get Quantitative Measurements (Data Reference)
+                var measurementString = "Standard Average Build"
+                if let m = userData?["measurements"] as? [String: Any] {
+                    let h = m["height"] as? Double ?? 0
+                    let w = m["bodyWeight"] as? Double ?? 0
+                    let chest = m["chest"] as? Double ?? 0
+                    let waist = m["waist"] as? Double ?? 0
+                    let hips = m["hips"] as? Double ?? 0
+                    
+                    // Format for Prompt: "Height: 180cm, Weight: 75kg, Chest: 100cm..."
+                    measurementString = """
+                    Height: \(h) cm
+                    Weight: \(w) kg
+                    Chest: \(chest) cm
+                    Waist: \(waist) cm
+                    Hips: \(hips) cm
+                    """
+                }
+                
+                // 4. Download & Prepare Base Avatar
+                let (avatarData, _) = try await URLSession.shared.data(from: avatarURL)
+                guard let rawAvatar = UIImage(data: avatarData) else { return }
+                let baseAvatarImage = resizeImage(image: rawAvatar, targetSize: CGSize(width: 1024, height: 1024)) ?? rawAvatar
+
+                // 5. Prepare Clothes
+                let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
+                
+                // 6. Construct Prompt
+                var promptParts: [any Part] = []
+                
+                // --- PART A: Visual Instructions (Text) ---
+                promptParts.append(TextPart("""
+                ROLE: Virtual Fashion Stylist.
+                TASK: Generate a high-quality ghost mannequin visualization of an outfit.
+                
+                VISUAL REQUIREMENTS (STRICT):
+                1. POSE: Front-facing, standing straight. Arms must be slightly raised/held away from the body (A-Pose) to show the fit clearly.
+                
+                2. BODY SHAPE & DIMENSIONS (CRITICAL):
+                   - You must generate a mannequin that MATCHES the user's specific measurements below.
+                   - IF Waist is close to Chest size, render a straighter torso.
+                   - IF Hips are wider than Waist, render a curvy/wide pelvic structure.
+                   - IF Height is tall vs Weight is low, render a slender/lanky frame.
+                   
+                   [USER MEASUREMENTS]:
+                   \(measurementString)
+                
+                3. SKIN TONE: Sample the skin color from the REFERENCE IMAGE (Image 1). The mannequin must match this skin tone.
+                
+                4. SUBJECT: A mannequin with an abstract/neutral head (no realistic face), but with the USER'S SKIN TONE and BODY SHAPE.
+                
+                5. BACKGROUND: Pure White (#FFFFFF). Clean studio lighting.
+                """))
+                
+                // --- PART B: Reference Image ---
+                promptParts.append(TextPart("\n\nREFERENCE IMAGE (For Skin Tone & Visual Proportions):"))
+                if let avatarJPG = baseAvatarImage.jpegData(compressionQuality: 0.9) {
+                    promptParts.append(InlineDataPart(data: avatarJPG, mimeType: "image/jpeg"))
+                }
+                
+                // --- PART C: Garments ---
+                promptParts.append(TextPart("\n\nGARMENTS TO WEAR (Layer these onto the mannequin):"))
+                for item in selectedClothes {
+                    if let url = URL(string: item.remoteURL) {
+                        let (data, _) = try await URLSession.shared.data(from: url)
+                        if let rawImg = UIImage(data: data) {
+                            let resizedImg = resizeImage(image: rawImg, targetSize: CGSize(width: 512, height: 512)) ?? rawImg
+                            if let jpg = resizedImg.jpegData(compressionQuality: 0.8) {
+                                promptParts.append(InlineDataPart(data: jpg, mimeType: "image/jpeg"))
+                            }
                         }
                     }
                 }
-            }
-
-            let promptText = """
-            TASK: 3D Avatar Texture Editing.
-            Target Gender: \(userGender).
-            INPUT ROLES:
-            - Image 1: BASE 3D MODEL (Avatar).
-            - Images 2+: TEXTURE REFERENCES (Clothes).
-            INSTRUCTIONS:
-            - Dress the Avatar in the clothes.
-            - KEEP Avatar's identity/face 100% unchanged.
-            - NO PHOTOREALISM. Maintain 3D render style.
-            - Output single full-body image.
-            OUTFIT SPECS: \(itemDescriptions).
-            """
-            
-            var parts: [any Part] = []
-            parts.append(TextPart(promptText))
-            if let avatarJPEG = avatarImage.jpegData(compressionQuality: 0.6) {
-                parts.append(InlineDataPart(data: avatarJPEG, mimeType: "image/jpeg"))
-            }
-            parts.append(contentsOf: clothingParts)
-            
-            let content = ModelContent(role: "user", parts: parts)
-            let response = try await imageGenModel.generateContent([content])
-
-            if let firstCandidate = response.candidates.first,
-               let firstPart = firstCandidate.content.parts.first {
                 
-                if let inlineData = firstPart as? InlineDataPart,
-                   let generatedImage = UIImage(data: inlineData.data) {
-                    await MainActor.run {
-                        self.generatedTryOnImage = generatedImage
-                        self.isGeneratingTryOn = false
+                // --- PART D: Execute ---
+                promptParts.append(TextPart("\n\nGENERATE: The final mannequin image matching the user's measurements and skin tone on a white background."))
+                
+                // 7. Call Gemini API
+                let content = ModelContent(role: "user", parts: promptParts)
+                let response = try await imageGenModel.generateContent([content])
+
+                // 8. Handle Response
+                if let firstCandidate = response.candidates.first {
+                    var foundImage: UIImage? = nil
+                    
+                    for part in firstCandidate.content.parts {
+                        if let inlineData = part as? InlineDataPart,
+                           let image = UIImage(data: inlineData.data) {
+                            foundImage = image
+                            break
+                        }
                     }
-                } else if let textPart = firstPart as? TextPart {
-                    await MainActor.run {
-                        self.tryOnMessage = "Stylist Note: \(textPart.text)"
-                        self.isGeneratingTryOn = false
+                    
+                    if let image = foundImage {
+                        await MainActor.run {
+                            self.generatedTryOnImage = image
+                            self.isGeneratingTryOn = false
+                        }
+                    } else if let textPart = firstCandidate.content.parts.first as? TextPart {
+                        print("Gemini Text: \(textPart.text)")
+                        await MainActor.run {
+                            self.tryOnMessage = "Stylist Note: \(textPart.text)"
+                            self.isGeneratingTryOn = false
+                        }
                     }
                 }
+            } catch {
+                print("DEBUG: Try-On Error - \(error.localizedDescription)")
+                await MainActor.run {
+                    self.tryOnMessage = "Error: Could not finish styling. Try fewer items."
+                    self.isGeneratingTryOn = false
+                }
             }
-        } catch {
-            print("DEBUG: Error - \(error.localizedDescription)")
-            await MainActor.run { isGeneratingTryOn = false }
         }
-    }
-    
     // MARK: - 6. Save Generated Look
     func saveCurrentLook() async {
         guard let image = generatedTryOnImage, let userEmail = Auth.auth().currentUser?.email else { return }
