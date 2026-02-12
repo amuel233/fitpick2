@@ -473,7 +473,7 @@ class ClosetViewModel: ObservableObject {
             }
         }
     
-    // MARK: - Save Logic (Instant Refresh Fix)
+    // MARK: - Save Logic (Instant Refresh Fix) 
         
         /// Saves the currently generated try-on to history with INSTANT UI UPDATE
         func saveCurrentLook() async {
