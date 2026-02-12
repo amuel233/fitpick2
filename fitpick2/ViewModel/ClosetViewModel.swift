@@ -244,14 +244,14 @@ class ClosetViewModel: ObservableObject {
         db.collection("clothes").document(customDocID).setData(data)
     }
 
-    // MARK: - 5. Virtual Try-On Logic (With Mannequin Face)
+    // MARK: - 5. Virtual Try-On Logic (Gender & Measurement Aware)
         /// Generates a "Ghost Mannequin" visualization.
         /// - Features:
         ///   1. Validates outfit combinations.
-        ///   2. Injects User Measurements for accurate body shape.
-        ///   3. REQUESTS A VISIBLE MANNEQUIN HEAD with abstract features.
+        ///   2. Injects User GENDER and MEASUREMENTS for accurate body shape.
+        ///   3. Requests a visible, abstract mannequin head.
         func generateVirtualTryOn(selectedItemIDs: Set<String>) async {
-            print("DEBUG: Starting Try-On (Mannequin Face Mode)...")
+            print("DEBUG: Starting Try-On (Gender Mode)...")
             
             // 1. Reset UI State
             await MainActor.run {
@@ -262,56 +262,32 @@ class ClosetViewModel: ObservableObject {
                 currentItemsUsed = Array(selectedItemIDs)
             }
             
-            // 2. VALIDATION: Check for Impossible/Incoherent Outfits
+            // 2. VALIDATION
             let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
             
-            // A. Identify "One-Piece" items
             let fullBodyItems = selectedClothes.filter { item in
                 let sub = item.subCategory.lowercased()
-                return sub.contains("dress") ||
-                       sub.contains("jumpsuit") ||
-                       sub.contains("romper") ||
-                       sub.contains("gown") ||
-                       sub.contains("one-piece")
+                return sub.contains("dress") || sub.contains("jumpsuit") || sub.contains("romper") || sub.contains("gown") || sub.contains("one-piece")
             }
-            
-            // Create Set for fast lookup
             let fullBodyIDs = Set(fullBodyItems.map { $0.id })
             
-            // B. Identify Separates
             let tops = selectedClothes.filter { $0.category == .top && !fullBodyIDs.contains($0.id) }
             let bottoms = selectedClothes.filter { $0.category == .bottom && !fullBodyIDs.contains($0.id) }
             let shoes = selectedClothes.filter { $0.category == .shoes }
             
-            // --- RULE CHECKING ---
-            if shoes.count > 1 {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 pair of shoes." }
-                return
-            }
+            if shoes.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 pair of shoes." }; return }
             if !fullBodyItems.isEmpty {
-                if !bottoms.isEmpty {
-                    await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "You cannot wear a Dress and Bottoms together." }
-                    return
-                }
-                if fullBodyItems.count > 1 {
-                    await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Full-Body outfit." }
-                    return
-                }
+                if !bottoms.isEmpty { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "You cannot wear a Dress and Bottoms together." }; return }
+                if fullBodyItems.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Full-Body outfit." }; return }
             }
-            if fullBodyItems.isEmpty && bottoms.count > 1 {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Bottom." }
-                return
-            }
-            if tops.count > 2 {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Layering Limit: Max 2 Tops." }
-                return
-            }
+            if fullBodyItems.isEmpty && bottoms.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Bottom." }; return }
+            if tops.count > 2 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Layering Limit: Max 2 Tops." }; return }
             
             // 3. Auth Check
             guard let currentUserEmail = Auth.auth().currentUser?.email else { return }
             
             do {
-                // 4. Fetch User Profile & Measurements
+                // 4. Fetch User Data (Profile, Avatar, Measurements)
                 let userDoc = try await db.collection("users").document(currentUserEmail).getDocument()
                 let userData = userDoc.data()
                 
@@ -321,7 +297,10 @@ class ClosetViewModel: ObservableObject {
                     return
                 }
                 
-                // Format Measurements
+                // --- NEW: GET GENDER ---
+                let gender = userData?["gender"] as? String ?? "Neutral"
+                
+                // Get Measurements
                 var measurementString = "Standard Average Build"
                 if let m = userData?["measurements"] as? [String: Any] {
                     let h = m["height"] as? Double ?? 0
@@ -348,14 +327,16 @@ class ClosetViewModel: ObservableObject {
                 VISUAL REQUIREMENTS (STRICT):
                 1. POSE: Front-facing, standing straight. Arms slightly away from body (A-Pose).
                 
-                2. HEAD & FACE (CRITICAL):
+                2. BODY & GENDER (CRITICAL):
+                   - Target Gender: \(gender).
+                   - The mannequin structure must reflect a \(gender) physique (e.g. shoulder width, hip ratio) consistent with the gender.
+                   - Match these User Measurements: \(measurementString).
+                   - Sample the SKIN TONE from the Reference Image (Image 1).
+                
+                3. HEAD & FACE:
                    - Render a DEFINED MANNEQUIN HEAD. Do not crop the head.
                    - The face must be ABSTRACT/STYLIZED (smooth features, like a high-end store mannequin).
                    - DO NOT generate a realistic human face (no photo-real eyes/pores).
-                
-                3. BODY & MEASUREMENTS:
-                   - Match these User Measurements: \(measurementString)
-                   - Sample the SKIN TONE from the Reference Image (Image 1) and apply it to the mannequin's body/neck.
                 
                 4. BACKGROUND: Pure White (#FFFFFF).
                 """))
@@ -380,7 +361,7 @@ class ClosetViewModel: ObservableObject {
                     }
                 }
                 
-                promptParts.append(TextPart("\n\nGENERATE: The final mannequin image with a visible abstract head."))
+                promptParts.append(TextPart("\n\nGENERATE: The final mannequin image."))
                 
                 // 7. Generate
                 let content = ModelContent(role: "user", parts: promptParts)
