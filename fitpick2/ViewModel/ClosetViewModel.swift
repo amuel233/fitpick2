@@ -10,6 +10,7 @@ import FirebaseFirestore
 import FirebaseStorage
 import FirebaseAuth
 import FirebaseAILogic
+import Kingfisher // Make sure this is imported
 
 // MARK: - Models
 
@@ -436,12 +437,41 @@ class ClosetViewModel: ObservableObject {
         }
     }
     
-    /// Deletes a look from history.
-    func deleteLook(_ look: SavedLook) {
-        db.collection("generated_looks").document(look.id).delete()
-        let storageRef = storage.reference(forURL: look.imageURL)
-        storageRef.delete { _ in }
-    }
+    // MARK: - Delete Logic (Fixed)
+        
+        /// Deletes a look with Instant UI Refresh + Cache Cleanup
+        func deleteLook(_ look: SavedLook) {
+            // 1. OPTIMISTIC UPDATE (UI)
+            // We find and remove the item INSIDE the main thread block to prevent crashes.
+            DispatchQueue.main.async {
+                withAnimation {
+                    // "removeAll" is safer than "remove(at:)" because it handles the index logic for us
+                    self.savedLooks.removeAll { $0.id == look.id }
+                }
+            }
+            
+            // 2. KINGFISHER CLEANUP (Disk Space)
+            // Remove the "dead" image from the phone's cache immediately.
+            let cacheKey = look.imageURL
+            ImageCache.default.removeImage(forKey: cacheKey)
+            
+            // 3. FIRESTORE DELETION (Database)
+            db.collection("generated_looks").document(look.id).delete() { error in
+                if let error = error {
+                    print("Error deleting from Firestore: \(error.localizedDescription)")
+                    // Optional: If server delete fails, re-fetch to restore the UI
+                    self.listenToSavedLooks()
+                }
+            }
+            
+            // 4. FIREBASE STORAGE DELETION (Cloud Storage)
+            let storageRef = storage.reference(forURL: look.imageURL)
+            storageRef.delete { error in
+                if let error = error {
+                    print("Error deleting from Firebase Storage: \(error.localizedDescription)")
+                }
+            }
+        }
     
     /// Saves the currently generated try-on to history.
     func saveCurrentLook() async {
