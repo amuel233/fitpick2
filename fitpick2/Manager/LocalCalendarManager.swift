@@ -58,6 +58,35 @@ class LocalCalendarManager {
             }
         }
     }
+    
+    // NEW: Function to fetch all events in a specific window  --- START
+    func fetchAllUpcomingEvents(completion: @escaping ([EKEvent]) -> Void) {
+        if #available(iOS 17.0, *) {
+            store.requestFullAccessToEvents { granted, error in
+                self.processFetch(granted: granted, completion: completion)
+            }
+        } else {
+            store.requestAccess(to: .event) { granted, error in
+                self.processFetch(granted: granted, completion: completion)
+            }
+        }
+    }
+
+    private func processFetch(granted: Bool, completion: @escaping ([EKEvent]) -> Void) {
+        guard granted else {
+            print("❌ Calendar access denied")
+            completion([])
+            return
+        }
+
+        let now = Date()
+        let endOfDay = Calendar.current.startOfDay(for: now).addingTimeInterval(86400)
+        let predicate = store.predicateForEvents(withStart: now, end: endOfDay, calendars: nil)
+        let events = store.events(matching: predicate)
+        
+        DispatchQueue.main.async { completion(events) }
+    }
+    // --- END
 
     private func formatDate(_ date: Date) -> String {
         let df = DateFormatter()
