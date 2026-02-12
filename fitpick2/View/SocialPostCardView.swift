@@ -130,20 +130,30 @@ struct SocialPostCardView: View {
                 // AI Button
                 Button(action: {
                     print("AI Try On Triggered")
-                    // TODO: ADD LOGIC HERE
-                    
                     Task {
+                        isProcessing = true // Start loading
                             await tryFit()
+                        isProcessing = false
                         }
                     
                 }) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 18, weight: .bold))
-                        .padding(10)
-                        .background(.ultraThinMaterial)
-                        .foregroundColor(.white)
-                        .clipShape(Circle())
-                        .shadow(radius: 5)
+                    ZStack {
+                        if isProcessing {
+                            // The Loading Spinner
+                            ProgressView()
+                                .tint(.white)
+                                .controlSize(.regular)
+                        } else {
+                            // The Original Icon
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 18, weight: .bold))
+                        }
+                    }
+                    .frame(width: 40, height: 40) // Ensure the button size stays consistent
+                    .background(.ultraThinMaterial)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .shadow(radius: isProcessing ? 0 : 5)
                 }
                 .padding(12)
                 .disabled(isProcessing)
@@ -156,16 +166,23 @@ struct SocialPostCardView: View {
                                 .padding()
                             
                             if let uiImage = generatedImage {
+                                
+                                Spacer() // Pushes image to center
+                                
                                 Image(uiImage: uiImage)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(maxWidth: 300)
+                                    .frame(maxWidth: .infinity)
                                     .cornerRadius(12)
+                                    .padding(.horizontal, 20)
+                                
+                                Spacer()
                             }
                             
                             Button("Close") {
                                 isShowingPopup = false
                             }
+                            .buttonStyle(.borderedProminent)
                             .padding()
                         }
                     }.animation(.default, value: isProcessing)
@@ -245,39 +262,50 @@ struct SocialPostCardView: View {
     
     @MainActor
     func tryFitWithAI(avatarURL: UIImage, postURL: UIImage) async {
+        isProcessing = true
         
-            isProcessing = true
-            let task = Task { () -> UIImage? in
-            let ai = FirebaseAI.firebaseAI(backend: .googleAI())
-            let model = ai.imagenModel(modelName: "imagen-4.0-generate-001")
-            
-            let prompt = """
-            
-            Persona: You are an expert Virtual Stylist and Image Synthesis engine.
-            Task: Perform a 3D "Virtual Try-On" by transferring clothing from a source image to a target subject.
-            Steps:
-            1. Analyze Source: Extract the complete outfit (including texture, fabric, and fit) from the person in this image: \(postURL), and convert it to 3D.
-            2. Analyze Target: Identify the person (the "Avatar") in this image: \(avatarURL). Maintain their physical identity, and body proportions exactly.
-            3. Execution: Generate a new image where the Avatar from \(avatarURL) is wearing the exact outfit extracted from \(postURL). Ensure the clothing drapes naturally according to the Avatar's pose. Explicitly only generate the image of the user wearing the exact outfit.
+        // We call a separate function to handle the SDK work
+        if let uiImage = await performGeneration(avatarImage: avatarURL, postImage: postURL) {
+            self.generatedImage = uiImage
+            self.isShowingPopup = true
+        }
+        
+        isProcessing = false
+    }
+    
+    nonisolated func performGeneration(avatarImage: UIImage, postImage: UIImage) async -> UIImage? {
+        let generativeModel = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(
+            modelName: "gemini-2.5-flash-image",
+            generationConfig: GenerationConfig(responseModalities: [.text, .image])
+        )
+
+        // Note: Use the UIImage object directly in the array to ensure
+        // the AI actually processes the image data.
+        let prompt: [any PartsRepresentable] = [
+            "Image 1 is a person (the avatar). Image 2 contains a specific clothing item.",
+            avatarImage, // This becomes 'Image 1'
+            postImage,   // This becomes 'Image 2'
             """
-                
-            do {
-                // 2. 'model' is created and used ONLY here, so it never "crosses" actors
-                let response = try await model.generateImages(prompt: prompt)
-                
-                guard let data = response.images.first?.data else { return nil }
-                return UIImage(data: data)
-            } catch {
-                print("Generation error: \(error)")
+            Extract the exact clothing seen in Image 2 and render it onto the person in Image 1. 
+            Maintain the person's pose, face, and physical characteristics from Image 1, 
+            but replace their current outfit with the outfit from Image 2. 
+            The final result should be a high-quality, realistic photograph.
+            """
+        ]
+
+        do {
+            let response = try await generativeModel.generateContent(prompt)
+            
+            guard let inlineDataPart = response.inlineDataParts.first,
+                  let uiImage = UIImage(data: inlineDataPart.data) else {
                 return nil
             }
+            return uiImage
+        } catch {
+            print("Generation error: \(error)")
+            return nil
         }
-                if let uiImage = await task.value {
-                    self.generatedImage = uiImage
-                    self.isShowingPopup = true
-                }
-            isProcessing = false
-        }
+    }
 
       
     func downloadImage(from urlString: String?) async -> UIImage? {

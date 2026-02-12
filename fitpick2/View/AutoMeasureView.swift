@@ -25,9 +25,11 @@ struct AutoMeasureView: View {
     @State private var isLocked = false
     
     @EnvironmentObject var session: UserSession
-    
-        
     @Environment(\.dismiss) var dismiss // Add this line
+    
+    @State private var countdown = 10
+    @State private var isTimerRunning = false
+    @State private var timer: Timer? = nil
 
     
     // ADD THIS: A closure to return the final values
@@ -53,22 +55,41 @@ struct AutoMeasureView: View {
                     }
                 }.ignoresSafeArea()
                 
+                if isTimerRunning {
+                    Text("\(countdown)")
+                        .font(.system(size: 120, weight: .bold, design: .rounded))
+                        .foregroundColor(.orange)
+                        .shadow(color: .black.opacity(0.5), radius: 10)
+                        .transition(.scale)
+                        .zIndex(1) // Ensure it's above the skeleton
+                }
+                
                 VStack {
-                                        HStack {
-                                            Button(action: {
-                                                // This triggers the dismissal of the fullScreenCover
-                                                // If you are using 'dismiss' environment variable:
-                                                dismiss()
-                                            }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .font(.system(size: 30))
-                                                    .foregroundColor(.white.opacity(0.8))
-                                                    .padding()
-                                            }
-                                            Spacer()
-                                        }
-                                        Spacer()
-                                    }
+                    HStack {
+                        Button(action: {
+                            // This triggers the dismissal of the fullScreenCover
+                            // If you are using 'dismiss' environment variable:
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding()
+                        }
+                        Spacer()
+                        
+                        Button(action: {
+                                cameraManager.switchCamera()
+                            }) {
+                                Image(systemName: "camera.rotate.fill")
+                                    .font(.system(size: 30))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .padding()
+                            }
+                        
+                    }
+                    Spacer()
+                }
                 
                 // HUD Overlay
                 VStack {
@@ -113,6 +134,8 @@ struct AutoMeasureView: View {
                 
                 
                 Spacer() // Pushes the results to the bottom
+                
+               
                     
                 if !measurements.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -128,7 +151,7 @@ struct AutoMeasureView: View {
                             }
                         }
                         .padding()
-                        .background(RoundedRectangle(cornerRadius: 15).fill(.black.opacity(0.75)))
+                        .background(RoundedRectangle(cornerRadius: 15).fill(.black.opacity(0.0)))
                         .foregroundColor(.white)
                         .frame(width: 250)
                         .padding(.bottom, 40)
@@ -142,8 +165,39 @@ struct AutoMeasureView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
+    
+    func startCountdown() {
+        isTimerRunning = true
+        countdown = 10
+        
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            if countdown > 1 {
+                countdown -= 1
+                // Optional: Light haptic tick every second
+                UISelectionFeedbackGenerator().selectionChanged()
+            } else {
+                stopTimer()
+                captureAndLog() // Trigger the capture
+            }
+        }
+    }
+
+    func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+        isTimerRunning = false
+    }
+
+    func resetCountdown() {
+        if isTimerRunning {
+            stopTimer()
+            countdown = 10
+        }
+    }
 
     func processFrame(_ buffer: CMSampleBuffer) {
+        
+        let orientation: CGImagePropertyOrientation = (cameraManager.cameraPosition == .front) ? .leftMirrored : .right
         
         // 1. Use .right orientation for the back camera in Portrait mode
         let request = VNDetectHumanBodyPoseRequest()
@@ -184,11 +238,17 @@ struct AutoMeasureView: View {
                        let rightAnkle = try? result.recognizedPoint(.rightAnkle), rightAnkle.confidence > 0.5 {
                         self.statusText = "Person Fully Detected! ✅"
                         self.calculateMeasurements()
+                        
+                        if cameraManager.cameraPosition == .front && !isTimerRunning {
+                                    startCountdown()
+                                }
+                        
                     } else {
                         self.statusText = "Step back: Feet not visible"
                     }
                 } else {
                     self.statusText = "Measurements Locked 🔒"
+                    resetCountdown()
                 }
             }
             
@@ -326,6 +386,9 @@ class CameraManager: NSObject, ObservableObject {
     private let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
     var currentBuffer: CMSampleBuffer?
+    
+    // Track the current camera position
+        @Published var cameraPosition: AVCaptureDevice.Position = .back
 
     
     // This is where the processed Vision results will be sent
@@ -335,25 +398,32 @@ class CameraManager: NSObject, ObservableObject {
         super.init()
         setupSession()
     }
+    
+    func switchCamera() {
+            sessionQueue.async {
+                self.cameraPosition = (self.cameraPosition == .back) ? .front : .back
+                self.setupSession()
+            }
+        }
 
     private func setupSession() {
         sessionQueue.async {
             self.session.beginConfiguration()
+            self.session.inputs.forEach { self.session.removeInput($0) }
             
-            // 1. Choose Camera (Back camera is better for full body)
-            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: self.cameraPosition),
                   let videoInput = try? AVCaptureDeviceInput(device: videoDevice) else { return }
             
             if self.session.canAddInput(videoInput) { self.session.addInput(videoInput) }
             
-            // 2. Set up Output
-            if self.session.canAddOutput(self.videoOutput) {
-                self.session.addOutput(self.videoOutput)
-                self.videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "video.queue"))
+            if self.session.outputs.isEmpty {
+                if self.session.canAddOutput(self.videoOutput) {
+                    self.session.addOutput(self.videoOutput)
+                    self.videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "video.queue"))
+                }
             }
-            
             self.session.commitConfiguration()
-            self.session.startRunning()
+            if !self.session.isRunning { self.session.startRunning() }
         }
     }
 }
@@ -409,9 +479,9 @@ extension AutoMeasureView {
             completion(nil)
             return
         }
-        
-        // Note: Orientation .right because we are in portrait using the back camera
-        let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+
+        let uiOrientation: UIImage.Orientation = (cameraManager.cameraPosition == .front) ? .leftMirrored : .right
+        let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: uiOrientation)
         guard let imageData = uiImage.jpegData(compressionQuality: 0.7) else {
             completion(nil)
             return
@@ -433,3 +503,5 @@ extension AutoMeasureView {
         }
     }
 }
+
+
