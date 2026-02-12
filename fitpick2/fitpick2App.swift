@@ -10,6 +10,7 @@ import FirebaseCore
 import FirebaseAuth
 import GoogleSignIn
 import FirebaseFirestore
+import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
@@ -21,6 +22,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
         return GIDSignIn.sharedInstance.handle(url)
     }
+    
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+            Messaging.messaging().apnsToken = deviceToken
+        }
 }
 
 @main
@@ -29,14 +34,27 @@ struct fitpick2App: App {
     @StateObject private var appState = AppState()
     @StateObject private var session = UserSession()
     
+    private let reminderService = WardrobeReminderService()
+    
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
                 .environmentObject(session)
                 .onAppear {
-                    // Link the session to appState so navigation triggers automatically
+                    // Link the session to appState
                     session.linkAppState(appState)
+                    
+                    // Request Notification Permissions
+                    // This triggers the FCM Token generation and the 'wardrobe_reminders' subscription
+                    NotificationManager.shared.requestPermissions()
+                    
+                    // Run the Wardrobe + Calendar Check
+                    // This calls LocalCalendarManager and FirestoreManager
+                    // We wrap it in a slight delay to ensure the database and session are stable
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        reminderService.runReminderCheck()
+                    }
                 }
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
