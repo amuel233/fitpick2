@@ -13,18 +13,37 @@ struct WardrobeItem: Identifiable {
     let id: String
     let imageURL: String
     let category: String
+    let subcategory: String
 }
 
 struct WardrobeSelectorView: View {
     @Binding var selectedItems: Set<String>
     @State private var wardrobe: [WardrobeItem] = []
     @State private var isLoading = true
+    @State private var searchText = ""
     @Environment(\.dismiss) var dismiss
     
     // Theme Colors
     let fitPickGold = Color("fitPickGold")
     let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
-    let fitPickText = Color(red: 26/255, green: 26/255, blue: 27/255)
+
+    // Filter Logic updated to search by subcategory
+    private var filteredWardrobe: [WardrobeItem] {
+        if searchText.isEmpty {
+            return wardrobe
+        } else {
+            return wardrobe.filter { $0.subcategory.localizedCaseInsensitiveContains(searchText) }
+        }
+    }
+
+    // Items remain grouped by the main category for the layout
+    private var groupedWardrobe: [String: [WardrobeItem]] {
+        Dictionary(grouping: filteredWardrobe, by: { $0.category })
+    }
+    
+    private var categories: [String] {
+        groupedWardrobe.keys.sorted()
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,29 +53,22 @@ struct WardrobeSelectorView: View {
                 if isLoading {
                     ProgressView().tint(fitPickGold)
                 } else if wardrobe.isEmpty {
-                    VStack(spacing: 15) {
-                        Image(systemName: "tshirt")
-                            .font(.system(size: 50))
-                            .foregroundColor(fitPickGold.opacity(0.5))
-                        Text("Your closet is empty")
-                            .font(.headline)
-                        Text("Upload clothes to your wardrobe first to tag them.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
+                    emptyStateView(title: "Your closet is empty", sub: "Upload clothes to your wardrobe first.")
                 } else {
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 15)], spacing: 15) {
-                            ForEach(wardrobe) { item in
-                                wardrobeItemCard(item: item)
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 30) {
+                            ForEach(categories, id: \.self) { category in
+                                categoryCarouselSection(category: category)
                             }
                         }
-                        .padding()
+                        .padding(.vertical)
                     }
                 }
             }
             .navigationTitle("Select Items")
             .navigationBarTitleDisplayMode(.inline)
+            // Updated prompt to reflect subcategory search
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search subcategories (e.g. Vintage, Denim)...")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -68,39 +80,77 @@ struct WardrobeSelectorView: View {
         }
     }
 
+    // MARK: - Carousel Section
+    @ViewBuilder
+    private func categoryCarouselSection(category: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(category.uppercased())
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("\(groupedWardrobe[category]?.count ?? 0) items")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+            .padding(.horizontal)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    if let items = groupedWardrobe[category] {
+                        ForEach(items) { item in
+                            wardrobeItemCard(item: item)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 5)
+            }
+        }
+    }
+
     @ViewBuilder
     private func wardrobeItemCard(item: WardrobeItem) -> some View {
-        // We check against the item ID (Document ID)
         let isSelected = selectedItems.contains(item.id)
         
-        VStack {
+        VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .topTrailing) {
                 AsyncImage(url: URL(string: item.imageURL)) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Rectangle().fill(Color.gray.opacity(0.2))
+                    ZStack {
+                        Color.gray.opacity(0.1)
+                        ProgressView().scaleEffect(0.8)
+                    }
                 }
-                .frame(width: 110, height: 110)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .frame(width: 120, height: 140)
+                .clipShape(RoundedRectangle(cornerRadius: 15))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? fitPickGold : Color.clear, lineWidth: 3)
+                    RoundedRectangle(cornerRadius: 15)
+                        .stroke(isSelected ? fitPickGold : Color.black.opacity(0.05), lineWidth: isSelected ? 3 : 1)
                 )
                 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(fitPickGold)
-                        .background(Circle().fill(Color.white))
-                        .offset(x: 5, y: -5)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, fitPickGold)
+                        .font(.system(size: 22))
+                        .offset(x: 6, y: -6)
                 }
             }
             
-            Text(item.category)
+            // Added subcategory label below the image for clarity
+            Text(item.subcategory)
                 .font(.caption2)
-                .foregroundColor(fitPickText.opacity(0.7))
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 4)
         }
         .onTapGesture {
-            // Toggle the Document ID in the set
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             if isSelected {
                 selectedItems.remove(item.id)
             } else {
@@ -109,6 +159,17 @@ struct WardrobeSelectorView: View {
         }
     }
 
+    private func emptyStateView(title: String, sub: String) -> some View {
+        VStack(spacing: 15) {
+            Image(systemName: "tshirt")
+                .font(.system(size: 50))
+                .foregroundColor(fitPickGold.opacity(0.5))
+            Text(title).font(.headline)
+            Text(sub).font(.subheadline).foregroundColor(.secondary)
+        }
+    }
+
+    // MARK: - Data Fetching
     private func fetchUserClothes() {
         guard let email = Auth.auth().currentUser?.email else {
             isLoading = false
@@ -119,15 +180,16 @@ struct WardrobeSelectorView: View {
             .whereField("ownerEmail", isEqualTo: email)
             .getDocuments { snap, error in
                 if let error = error {
-                    print("Error fetching clothes: \(error.localizedDescription)")
+                    print("Firestore Error: \(error.localizedDescription)")
                 }
                 
                 self.wardrobe = snap?.documents.compactMap { doc in
                     let data = doc.data()
                     return WardrobeItem(
-                        id: doc.documentID, // Storing the Document ID
+                        id: doc.documentID,
                         imageURL: data["imageURL"] as? String ?? "",
-                        category: data["category"] as? String ?? "Item"
+                        category: data["category"] as? String ?? "Other",
+                        subcategory: data["subcategory"] as? String ?? "General" // Fetching subcategory from Firestore
                     )
                 } ?? []
                 

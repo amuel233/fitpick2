@@ -16,39 +16,29 @@ struct SocialsView: View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
-                    // MARK: - Header with Follower Counts
-                    HStack(alignment: .lastTextBaseline) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Feed")
-                                .font(.system(size: 40, weight: .bold, design: .rounded))
-                                .foregroundColor(fitPickGold)
-                            
-                            // Tapping this navigates to the Followers/Following list
-                            NavigationLink(destination: SocialConnectionsView(firestoreManager: firestoreManager)) {
-                                HStack(spacing: 15) {
-                                    HStack(spacing: 4) {
-                                        Text("\(firestoreManager.followersList.count)")
-                                            .fontWeight(.bold)
-                                        Text("Followers")
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    HStack(spacing: 4) {
-                                        Text("\(firestoreManager.currentUserData?.following.count ?? 0)")
-                                            .fontWeight(.bold)
-                                        Text("Following")
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .font(.system(size: 14, design: .rounded))
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    // MARK: Header
+                    HStack(alignment: .center) {
+                        Text("Feed")
+                            .font(.system(size: 40, weight: .bold, design: .rounded))
+                            .foregroundColor(fitPickGold)
+                        
                         Spacer()
+                        
+                        NavigationLink(destination: ProfileView(firestoreManager: firestoreManager)) {
+                            if let selfieUrl = firestoreManager.currentUserData?.selfie, !selfieUrl.isEmpty {
+                                AsyncImage(url: URL(string: selfieUrl)) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: { ProgressView() }
+                                .frame(width: 40, height: 40).clipShape(Circle())
+                            } else {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .resizable().frame(width: 40, height: 40).foregroundColor(fitPickGold)
+                            }
+                        }
                     }
                     .padding()
 
-                    // MARK: - Posts Feed
+                    // MARK: Posts Feed
                     ScrollView {
                         LazyVStack(spacing: 20) {
                             ForEach(firestoreManager.posts) { post in

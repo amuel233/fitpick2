@@ -23,6 +23,9 @@ struct SocialPostCardView: View {
     @State private var isShowingPopup = false
     @State private var isProcessing = false
     @State private var showingDeleteAlert = false
+    
+    @State private var isEditingCaption = false
+    @State private var editedCaption: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -49,14 +52,23 @@ struct SocialPostCardView: View {
                 
                 // Action Buttons: Delete for owner, Follow/Unfollow for others
                 if myEmail == targetEmail {
-                    // DELETE BUTTON: Only visible if you are the owner
-                    Button(action: { showingDeleteAlert = true }) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 14))
-                            .foregroundColor(goldColor.opacity(0.8))
+                    Menu {
+                        Button(action: {
+                            editedCaption = post.caption
+                            isEditingCaption = true
+                        }) {
+                            Label("Edit Caption", systemImage: "pencil")
+                        }
+                        
+                        Button(role: .destructive, action: { showingDeleteAlert = true }) {
+                            Label("Delete Post", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 18))
+                            .foregroundColor(goldColor)
                             .padding(8)
-                            .background(goldColor.opacity(0.1))
-                            .clipShape(Circle())
+                            .contentShape(Rectangle())
                     }
                 } else {
                     // Follow Button
@@ -213,9 +225,35 @@ struct SocialPostCardView: View {
                     Spacer()
                 }
                 
-                if !post.caption.isEmpty {
+                if isEditingCaption {
+                    HStack {
+                        TextField("Edit caption...", text: $editedCaption)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .font(.subheadline)
+                        
+                        Button("Save") {
+                            updateCaption()
+                        }
+                        .font(.caption.bold())
+                        .foregroundColor(goldColor)
+                        
+                        Button("Cancel") {
+                            isEditingCaption = false
+                        }
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    }
+                } else if !post.caption.isEmpty {
+                    // This is your original caption display
                     (Text(post.username).bold().foregroundColor(goldColor) + Text(" ") + Text(post.caption).foregroundColor(.black))
                         .font(.subheadline)
+                        .onTapGesture {
+                            // Allows the owner to tap the text to start editing
+                            if firestoreManager.currentEmail == post.userEmail {
+                                editedCaption = post.caption
+                                isEditingCaption = true
+                            }
+                        }
                 }
                 
                 // Timestamp
@@ -355,7 +393,6 @@ struct SocialPostCardView: View {
         }
     
     func fetchPostURL(for postID: String) async -> String? {
-        
         let db = Firestore.firestore()
         let docRef = db.collection("socials").document(postID)
         do {
@@ -373,6 +410,18 @@ struct SocialPostCardView: View {
             print("Error fetching post: \(error)")
             return nil
         }
-        
+    }
+    
+    func updateCaption() {
+        let db = Firestore.firestore()
+        db.collection("socials").document(post.id).updateData([
+            "caption": editedCaption
+        ]) { error in
+            if let error = error {
+                print("Error updating caption: \(error.localizedDescription)")
+            } else {
+                isEditingCaption = false
+            }
+        }
     }
 }
