@@ -473,38 +473,63 @@ class ClosetViewModel: ObservableObject {
             }
         }
     
-    /// Saves the currently generated try-on to history.
-    func saveCurrentLook() async {
-        guard let image = generatedTryOnImage, let userEmail = Auth.auth().currentUser?.email else { return }
+    // MARK: - Save Logic (Instant Refresh Fix) 
         
-        await MainActor.run { isSavingTryOn = true }
-        
-        do {
-            guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
-            let fileName = "generated_\(UUID().uuidString).jpg"
-            let storageRef = storage.reference().child("generated_looks/\(fileName)")
+        /// Saves the currently generated try-on to history with INSTANT UI UPDATE
+        func saveCurrentLook() async {
+            guard let image = generatedTryOnImage, let userEmail = Auth.auth().currentUser?.email else { return }
             
-            _ = try await storageRef.putDataAsync(imageData)
-            let downloadURL = try await storageRef.downloadURL()
+            await MainActor.run { isSavingTryOn = true }
             
-            let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
-            try await db.collection("generated_looks").document(customDocID).setData([
-                "imageURL": downloadURL.absoluteString,
-                "ownerEmail": userEmail,
-                "itemsUsed": currentItemsUsed,
-                "createdat": FieldValue.serverTimestamp()
-            ])
-            
-            await MainActor.run {
-                isSavingTryOn = false
-                tryOnSavedSuccess = true
-                isSaved = true
+            do {
+                // 1. Upload Image
+                guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+                let fileName = "generated_\(UUID().uuidString).jpg"
+                let storageRef = storage.reference().child("generated_looks/\(fileName)")
+                
+                _ = try await storageRef.putDataAsync(imageData)
+                let downloadURL = try await storageRef.downloadURL()
+                
+                // 2. Prepare Data
+                let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
+                let urlString = downloadURL.absoluteString
+                let timestamp = Date()
+                
+                // 3. OPTIMISTIC UPDATE (The Fix)
+                // Manually add to the list so the UI updates INSTANTLY
+                let newLook = SavedLook(
+                    id: customDocID,
+                    imageURL: urlString,
+                    date: timestamp,
+                    itemsUsed: currentItemsUsed
+                )
+                
+                await MainActor.run {
+                    withAnimation {
+                        // Insert at the TOP of the list
+                        self.savedLooks.insert(newLook, at: 0)
+                    }
+                }
+                
+                // 4. Save to Firestore (Server Sync)
+                try await db.collection("generated_looks").document(customDocID).setData([
+                    "imageURL": urlString,
+                    "ownerEmail": userEmail,
+                    "itemsUsed": currentItemsUsed,
+                    "createdat": FieldValue.serverTimestamp()
+                ])
+                
+                // 5. Final UI Cleanup
+                await MainActor.run {
+                    isSavingTryOn = false
+                    tryOnSavedSuccess = true
+                    isSaved = true
+                }
+            } catch {
+                print("Error saving look: \(error.localizedDescription)")
+                await MainActor.run { isSavingTryOn = false }
             }
-        } catch {
-            print("Error saving look: \(error.localizedDescription)")
-            await MainActor.run { isSavingTryOn = false }
         }
-    }
     
     // MARK: - Helpers
     
