@@ -9,17 +9,23 @@ import SwiftUI
 
 struct SocialConnectionsView: View {
     @ObservedObject var firestoreManager: FirestoreManager
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int //
     @State private var showFollowRequiredAlert = false
     @State private var pendingUser: User?
     
     let fitPickGold = Color("fitPickGold")
+
+    // Add this initializer to accept a starting tab
+    init(firestoreManager: FirestoreManager, startingTab: Int = 0) {
+        self.firestoreManager = firestoreManager
+        self._selectedTab = State(initialValue: startingTab)
+    }
     
     var body: some View {
         VStack {
             Picker("Social", selection: $selectedTab) {
-                Text("Followers").tag(0)
-                Text("Following").tag(1)
+                Text("Followers").tag(0) // Tab 0
+                Text("Following").tag(1) // Tab 1
             }
             .pickerStyle(.segmented)
             .padding()

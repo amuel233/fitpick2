@@ -22,6 +22,12 @@ class FirestoreManager: ObservableObject {
     @Published var currentEmail: String? = Auth.auth().currentUser?.email
     @Published var currentUserData: User?
     
+    // MARK: - Added Filtering Logic
+    var myPosts: [SocialsPost] {
+        // Filters the posts to only show those belonging to the logged-in user
+        return posts.filter { $0.userEmail == self.currentEmail }
+    }
+
     init() {
         fetchSocialPosts()
         if let email = currentEmail {
@@ -177,6 +183,52 @@ class FirestoreManager: ObservableObject {
         }
     }
     
+    // MARK: - Update Socials Profile Logic
+    
+    func updateInlineProfile(newUsername: String, newBio: String?, newSelfie: UIImage?, completion: @escaping (Bool) -> Void) {
+        guard let email = currentEmail,
+              let oldUsername = currentUserData?.username else {
+            completion(false)
+            return
+        }
+        
+        // Handle Selfie Upload if a new image exists
+        if let selfie = newSelfie {
+            uploadSelfie(image: selfie, email: email) { url in
+                self.finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: url, completion: completion)
+            }
+        } else {
+            // Just update text data
+            finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: nil, completion: completion)
+        }
+    }
+
+    private func finalizeInlineUpdate(email: String, oldName: String, newName: String, bio: String?, selfieUrl: String?, completion: @escaping (Bool) -> Void) {
+        var updateData: [String: Any] = ["username": newName]
+        if let url = selfieUrl { updateData["selfie"] = url }
+        if let bio = bio { updateData["bio"] = bio }
+        
+        db.collection("users").document(email).updateData(updateData) { error in
+            if let error = error {
+                print("Update error: \(error.localizedDescription)")
+                completion(false)
+            } else {
+                self.updateUsernameEverywhere(email: email, oldUsername: oldName, newUsername: newName)
+                completion(true)
+            }
+        }
+    }
+
+    private func uploadSelfie(image: UIImage, email: String, completion: @escaping (String) -> Void) {
+        guard let imageData = image.jpegData(compressionQuality: 0.5) else { return }
+        let ref = Storage.storage().reference().child("selfies/\(email).jpg")
+        ref.putData(imageData, metadata: nil) { _, _ in
+            ref.downloadURL { url, _ in
+                completion(url?.absoluteString ?? "")
+            }
+        }
+    }
+    
     // MARK: - Socials Feed Listener
     
     func updateUsernameEverywhere(email: String, oldUsername: String, newUsername: String) {
@@ -242,7 +294,7 @@ class FirestoreManager: ObservableObject {
     }
     
     func deletePost(post: SocialsPost) {
-        // 1. Delete the image from Firebase Storage first
+        // Delete the image from Firebase Storage first
         let storageRef = Storage.storage().reference(forURL: post.imageUrl)
         
         storageRef.delete { [weak self] error in
@@ -252,7 +304,7 @@ class FirestoreManager: ObservableObject {
             }
             
             // 2. Delete the document from Firestore
-            self?.db.collection("social_posts").document(post.id).delete() { error in
+            self?.db.collection("socials").document(post.id).delete() { error in
                 if let error = error {
                     print("Error removing document: \(error.localizedDescription)")
                 } else {
