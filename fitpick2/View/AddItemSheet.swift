@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct AddItemSheet: View {
-    @Environment(\.dismiss) var dismiss
+    // FIX: Use presentationMode to avoid "Binding<Subject>" errors
+    @Environment(\.presentationMode) var presentationMode
     
     // 1. Accepts the image passed from ClosetView (Gallery Picker)
     let image: UIImage
@@ -86,7 +87,8 @@ struct AddItemSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    // FIX: Call presentationMode.wrappedValue.dismiss()
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
             }
         }
@@ -102,7 +104,8 @@ struct AddItemSheet: View {
                 subCategory: subCategory.isEmpty ? "Other" : subCategory,
                 size: size.isEmpty ? "Unknown" : size
             )
-            dismiss()
+            // FIX: Dismiss using presentationMode
+            presentationMode.wrappedValue.dismiss()
         }
     }
 }
