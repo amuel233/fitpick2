@@ -11,6 +11,8 @@ import FirebaseStorage
 import FirebaseAuth
 import FirebaseAILogic
 import Kingfisher
+// MARK: - Image Validation (Anti-Hallucination)
+import Vision // Ensure this is imported at the top
 
 // MARK: - Models
 
@@ -509,5 +511,50 @@ class ClosetViewModel: ObservableObject {
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         return newImage
+    }
+// MARK: - Image Validation (Anti-Hallucination)
+/// Validates if an image contains clothing items using Apple's Vision framework.
+/// Returns true if valid, false if it's likely a car, food, or non-fashion object.
+    func validateImageIsClothing(_ image: UIImage) async -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+        
+        return await withCheckedContinuation { continuation in
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            // Create a request to classify the image content
+            let request = VNClassifyImageRequest { request, error in
+                guard let results = request.results as? [VNClassificationObservation] else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                
+                // Filter for "fashion" or "clothing" related categories
+                // VNClassifyImageRequest uses a taxonomy of thousands of classes.
+                // We look for any classification that contains these keywords in the top results.
+                let clothingKeywords = ["clothing", "apparel", "shirt", "pants", "dress", "shoe", "coat", "jacket", "sweater", "fashion", "jersey", "uniform", "skirt", "footwear", "jean", "trouser", "bag", "hat", "cap", "sneaker", "boot", "sandal"]
+                
+                // Check the top 3 most confident classifications
+                // We only need the top 3 to know if it's a car vs a shirt.
+                let topResults = results.prefix(3)
+                
+                // Debug: Print what Vision thinks the image is
+                print("Vision Validation Results: \(topResults.map { "\($0.identifier) (\(String(format: "%.2f", $0.confidence)))" })")
+                
+                let isClothing = topResults.contains { observation in
+                    // Check if the identifier (e.g., "jersey") matches our keywords
+                    let id = observation.identifier.lowercased()
+                    return clothingKeywords.contains { id.contains($0) }
+                }
+                
+                continuation.resume(returning: isClothing)
+            }
+            
+            do {
+                try handler.perform([request])
+            } catch {
+                print("Failed to perform classification: \(error)")
+                continuation.resume(returning: false)
+            }
+        }
     }
 }

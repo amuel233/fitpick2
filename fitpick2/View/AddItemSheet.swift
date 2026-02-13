@@ -16,10 +16,15 @@ struct AddItemSheet: View {
     
     @ObservedObject var viewModel: ClosetViewModel
     
-    // Form State (Manual Entry Only)
+    // Form State (Manual Entry)
     @State private var category: ClothingCategory = .top
     @State private var subCategory: String = ""
     @State private var size: String = ""
+    
+    // Validation State
+    @State private var isValidating = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationStack {
@@ -63,12 +68,12 @@ struct AddItemSheet: View {
                     }
                 }
                 
-                // Section 3: Save Button
+                // Section 3: Save Button (With Validation Logic)
                 Section {
                     Button(action: saveItem) {
-                        if viewModel.isUploading {
+                        if viewModel.isUploading || isValidating {
                             HStack {
-                                Text("Saving...")
+                                Text(isValidating ? "Validating Image..." : "Saving...")
                                 Spacer()
                                 ProgressView()
                             }
@@ -80,16 +85,21 @@ struct AddItemSheet: View {
                         }
                     }
                     .listRowBackground(Color.blue)
+                    .disabled(viewModel.isUploading || isValidating)
                 }
-                .disabled(viewModel.isUploading)
             }
             .navigationTitle("New Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    // FIX: Call presentationMode.wrappedValue.dismiss()
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
+            }
+            // Alert for Invalid Images (e.g. Cars, Food)
+            .alert("Invalid Image", isPresented: $showingErrorAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
             }
         }
     }
@@ -97,14 +107,30 @@ struct AddItemSheet: View {
     // MARK: - Logic
     func saveItem() {
         Task {
-            // Calls the manual save function in ViewModel
+            // 1. Start Validation
+            isValidating = true
+            
+            // Check if image is actually clothing (Prevents Hallucinations)
+            // Note: Ensure 'validateImageIsClothing' is in your ClosetViewModel
+            let isValid = await viewModel.validateImageIsClothing(image)
+            
+            if !isValid {
+                // STOP: It's a car, food, etc.
+                isValidating = false
+                errorMessage = "This image does not appear to be a clothing item. Please upload a clear photo of a Top, Bottom, or Shoes."
+                showingErrorAlert = true
+                return
+            }
+            
+            // 2. Proceed to Save
             await viewModel.saveManualItem(
                 image: image,
                 category: category,
                 subCategory: subCategory.isEmpty ? "Other" : subCategory,
                 size: size.isEmpty ? "Unknown" : size
             )
-            // FIX: Dismiss using presentationMode
+            
+            isValidating = false
             presentationMode.wrappedValue.dismiss()
         }
     }
