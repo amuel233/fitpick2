@@ -11,6 +11,9 @@ import FirebaseStorage
 import FirebaseAuth
 import FirebaseAILogic
 import Kingfisher
+// MARK: - Image Validation (Anti-Hallucination)
+import Vision // Ensure this is imported at the top
+
 
 // MARK: - Models
 
@@ -68,6 +71,35 @@ class ClosetViewModel: ObservableObject {
     // AI Model
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
 
+// MARK: - MVVM View State (Added)
+    
+    // 1. Filter State
+    @Published var selectedCategory: ClothingCategory? = nil
+    
+    // 2. Selection State
+    @Published var selectedItemIDs: Set<String> = []
+    
+    // 3. Computed Data for Grid
+    // The View just asks for "filteredItems" and gets the correct list instantly.
+    var filteredItems: [ClothingItem] {
+        guard let category = selectedCategory else { return clothingItems }
+        return clothingItems.filter { $0.category == category }
+    }
+    
+    // 4. Intents (Actions)
+    func toggleSelection(_ item: ClothingItem) {
+        if selectedItemIDs.contains(item.id) {
+            selectedItemIDs.remove(item.id)
+        } else {
+            selectedItemIDs.insert(item.id)
+        }
+    }
+    
+    func clearSelection() {
+        selectedItemIDs.removeAll()
+    }
+
+    
     // MARK: - Initialization
     
     init(targetEmail: String? = nil) {
@@ -510,4 +542,92 @@ class ClosetViewModel: ObservableObject {
         UIGraphicsEndImageContext()
         return newImage
     }
+// MARK: - Image Validation (Strict Mode)
+/// Validates if an image contains clothing.
+    /// Returns FALSE if the image contains nature, vehicles, or food.
+    func validateImageIsClothing(_ image: UIImage) async -> Bool {
+        guard let cgImage = image.cgImage else { return false }
+        
+        return await Task.detached(priority: .userInitiated) {
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            // Helper to store result safely
+            var isClothing = false
+            
+            let request = VNClassifyImageRequest { request, error in
+                if let error = error {
+                    print("Vision Error: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let results = request.results as? [VNClassificationObservation] else { return }
+                
+                // 1. GET TOP RESULTS
+                // We check the top 3 items the AI is most confident about.
+                let topResults = results.prefix(3)
+                
+                // 🔍 DEBUG PRINT: Look at your Xcode Console to see this!
+                let observationString = topResults.map { "\($0.identifier) (\(Int($0.confidence * 100))%)" }.joined(separator: ", ")
+                print("🤖 Vision sees: [\(observationString)]")
+                
+                // 2. BLACKLIST (Immediate Fail)
+                // If any of the top results match these, BLOCK IT immediately.
+                let blacklist = [
+                    "tree", "plant", "flower", "grass", "nature", "forest",
+                    "vehicle", "car", "truck", "bicycle", "wheel",
+                    "food", "dish", "vegetable", "fruit", "meat",
+                    "animal", "dog", "cat", "bird",
+                    "building", "room", "furniture"
+                ]
+                
+                for result in topResults {
+                    if blacklist.contains(where: { result.identifier.lowercased().contains($0) }) {
+                        print("⛔️ Blocked: Detected '\(result.identifier)' which is in the blacklist.")
+                        isClothing = false
+                        return
+                    }
+                }
+                
+                // 3. WHITELIST (Required Match)
+                // The image MUST match one of these to pass.
+                let whitelist = [
+                    "clothing", "apparel", "shirt", "blouse", "top", "t-shirt", "sweatshirt", "hoodie",
+                    "pants", "trousers", "jeans", "shorts", "skirt", "leggings",
+                    "dress", "gown", "robe", "jumpsuit",
+                    "jacket", "coat", "blazer", "sweater", "cardigan", "vest", "suit",
+                    "shoe", "sneaker", "boot", "sandal", "heel", "loafer", "footwear",
+                    "hat", "cap", "bag", "purse", "accessory", "jersey", "uniform"
+                ]
+                
+                isClothing = topResults.contains { observation in
+                    let id = observation.identifier.lowercased()
+                    return whitelist.contains { id.contains($0) }
+                }
+                
+                if isClothing {
+                    print("✅ Validated as Clothing.")
+                } else {
+                    print("⚠️ Failed Validation: No clothing keywords found in top results.")
+                }
+            }
+            
+            do {
+                try handler.perform([request])
+                return isClothing
+            } catch {
+                print("Vision Critical Error: \(error.localizedDescription)")
+                
+                // SIMULATOR HANDLING:
+                // If you are on the Simulator, Vision often fails with "Espresso Error".
+                // We allow it on Simulator so you can keep coding, but on a Real Device, this fails.
+                #if targetEnvironment(simulator)
+                print("⚠️ Simulator detected: Allowing image bypass (Vision hardware unavailable).")
+                return true
+                #else
+                return false // Strict fail on real devices
+                #endif
+            }
+        }.value
+    }
 }
+
