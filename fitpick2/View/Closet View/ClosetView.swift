@@ -172,19 +172,6 @@ struct ClosetView: View {
 struct ClosetFilterView: View {
     @Binding var selectedCategory: ClothingCategory?
     
-    func iconName(for category: ClothingCategory?) -> String {
-            // 1. Handle nil (The "All" category)
-            guard let cat = category else { return "square.grid.2x2" }
-            
-            // 2. Handle all enum cases
-            switch cat {
-            case .top: return "tshirt"
-            case .bottom: return "icon-pants" // Or your custom "icon-pants"
-            case .shoes: return "shoe"
-            case .accessories: return "bag"
-            }
-        }
-    
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
@@ -195,7 +182,7 @@ struct ClosetFilterView: View {
                 )
                 ForEach(ClothingCategory.allCases, id: \.self) { cat in
                     FilterChip(
-                        icon: iconName(for: cat),
+                        icon: cat.icon,
                         isSelected: selectedCategory == cat,
                         action: { withAnimation { selectedCategory = cat } }
                     )
