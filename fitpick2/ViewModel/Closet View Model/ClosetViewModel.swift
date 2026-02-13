@@ -512,49 +512,92 @@ class ClosetViewModel: ObservableObject {
         UIGraphicsEndImageContext()
         return newImage
     }
-// MARK: - Image Validation (Anti-Hallucination)
-/// Validates if an image contains clothing items using Apple's Vision framework.
-/// Returns true if valid, false if it's likely a car, food, or non-fashion object.
+// MARK: - Image Validation (Strict Mode)
+/// Validates if an image contains clothing.
+    /// Returns FALSE if the image contains nature, vehicles, or food.
     func validateImageIsClothing(_ image: UIImage) async -> Bool {
         guard let cgImage = image.cgImage else { return false }
         
-        return await withCheckedContinuation { continuation in
+        return await Task.detached(priority: .userInitiated) {
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             
-            // Create a request to classify the image content
+            // Helper to store result safely
+            var isClothing = false
+            
             let request = VNClassifyImageRequest { request, error in
-                guard let results = request.results as? [VNClassificationObservation] else {
-                    continuation.resume(returning: false)
+                if let error = error {
+                    print("Vision Error: \(error.localizedDescription)")
                     return
                 }
                 
-                // Filter for "fashion" or "clothing" related categories
-                // VNClassifyImageRequest uses a taxonomy of thousands of classes.
-                // We look for any classification that contains these keywords in the top results.
-                let clothingKeywords = ["clothing", "apparel", "shirt", "pants", "dress", "shoe", "coat", "jacket", "sweater", "fashion", "jersey", "uniform", "skirt", "footwear", "jean", "trouser", "bag", "hat", "cap", "sneaker", "boot", "sandal"]
+                guard let results = request.results as? [VNClassificationObservation] else { return }
                 
-                // Check the top 3 most confident classifications
-                // We only need the top 3 to know if it's a car vs a shirt.
+                // 1. GET TOP RESULTS
+                // We check the top 3 items the AI is most confident about.
                 let topResults = results.prefix(3)
                 
-                // Debug: Print what Vision thinks the image is
-                print("Vision Validation Results: \(topResults.map { "\($0.identifier) (\(String(format: "%.2f", $0.confidence)))" })")
+                // 🔍 DEBUG PRINT: Look at your Xcode Console to see this!
+                let observationString = topResults.map { "\($0.identifier) (\(Int($0.confidence * 100))%)" }.joined(separator: ", ")
+                print("🤖 Vision sees: [\(observationString)]")
                 
-                let isClothing = topResults.contains { observation in
-                    // Check if the identifier (e.g., "jersey") matches our keywords
-                    let id = observation.identifier.lowercased()
-                    return clothingKeywords.contains { id.contains($0) }
+                // 2. BLACKLIST (Immediate Fail)
+                // If any of the top results match these, BLOCK IT immediately.
+                let blacklist = [
+                    "tree", "plant", "flower", "grass", "nature", "forest",
+                    "vehicle", "car", "truck", "bicycle", "wheel",
+                    "food", "dish", "vegetable", "fruit", "meat",
+                    "animal", "dog", "cat", "bird",
+                    "building", "room", "furniture"
+                ]
+                
+                for result in topResults {
+                    if blacklist.contains(where: { result.identifier.lowercased().contains($0) }) {
+                        print("⛔️ Blocked: Detected '\(result.identifier)' which is in the blacklist.")
+                        isClothing = false
+                        return
+                    }
                 }
                 
-                continuation.resume(returning: isClothing)
+                // 3. WHITELIST (Required Match)
+                // The image MUST match one of these to pass.
+                let whitelist = [
+                    "clothing", "apparel", "shirt", "blouse", "top", "t-shirt", "sweatshirt", "hoodie",
+                    "pants", "trousers", "jeans", "shorts", "skirt", "leggings",
+                    "dress", "gown", "robe", "jumpsuit",
+                    "jacket", "coat", "blazer", "sweater", "cardigan", "vest", "suit",
+                    "shoe", "sneaker", "boot", "sandal", "heel", "loafer", "footwear",
+                    "hat", "cap", "bag", "purse", "accessory", "jersey", "uniform"
+                ]
+                
+                isClothing = topResults.contains { observation in
+                    let id = observation.identifier.lowercased()
+                    return whitelist.contains { id.contains($0) }
+                }
+                
+                if isClothing {
+                    print("✅ Validated as Clothing.")
+                } else {
+                    print("⚠️ Failed Validation: No clothing keywords found in top results.")
+                }
             }
             
             do {
                 try handler.perform([request])
+                return isClothing
             } catch {
-                print("Failed to perform classification: \(error)")
-                continuation.resume(returning: false)
+                print("Vision Critical Error: \(error.localizedDescription)")
+                
+                // SIMULATOR HANDLING:
+                // If you are on the Simulator, Vision often fails with "Espresso Error".
+                // We allow it on Simulator so you can keep coding, but on a Real Device, this fails.
+                #if targetEnvironment(simulator)
+                print("⚠️ Simulator detected: Allowing image bypass (Vision hardware unavailable).")
+                return true
+                #else
+                return false // Strict fail on real devices
+                #endif
             }
-        }
+        }.value
     }
 }
+
