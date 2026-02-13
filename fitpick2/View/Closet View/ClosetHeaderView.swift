@@ -2,86 +2,110 @@
 //  ClosetHeaderView.swift
 //  fitpick
 //
-//  Created by Bryan Gavino on 1/20/26.
+//  Created by FitPick on 2/13/26.
 //
 
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
 import Kingfisher
 
 struct ClosetHeaderView: View {
-    // MARK: - Properties
-    
     @ObservedObject var viewModel: ClosetViewModel
     
-    // We assume this view model exists as it was in your previous file
+    // ViewModel for Avatar Generation logic
     @StateObject private var bodyVM = BodyMeasurementViewModel()
-    @State private var avatarURL: String? = nil
     
-    // Bindings
+    // Bindings for Try-On
     @Binding var tryOnImage: UIImage?
     @Binding var tryOnMessage: String?
     
-    // Save Logic
+    // Actions
     var onSave: (() -> Void)?
     var isSaving: Bool = false
     var isSaved: Bool = false
-    
-    // Guest Mode
     var isGuest: Bool = false
     
-    // Local UI State
+    // UI State
     @State private var showZoomedImage = false
     @State private var showHistorySheet = false
-    
-    private let db = Firestore.firestore()
     
     var body: some View {
         VStack(spacing: 15) {
             ZStack(alignment: .topTrailing) {
                 
-                // MARK: - IMAGE HOLDER
+                // MARK: - MAIN DISPLAY AREA
                 ZStack {
-                    // White background makes the "fit" image look seamless
-                    Color.white
+                    Color.white // Background
                     
                     if viewModel.isRestoringLook {
-                        ProgressView("Loading Look...")
-                            .scaleEffect(0.8)
+                        // A. Loading History
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("Restoring Look...").font(.caption).foregroundColor(.gray)
+                        }
+                        
                     } else if let tryOn = tryOnImage {
-                        // 1. Try-On Result (Generated Image)
+                        // B. Try-On Result (Generated Look)
                         Image(uiImage: tryOn)
                             .resizable()
                             .scaledToFit()
+                        
                     } else if let message = tryOnMessage {
-                        // 2. Error Message
+                        // C. Error Message
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.largeTitle).foregroundColor(.orange)
                             Text(message)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
+                                .font(.caption).foregroundColor(.secondary)
+                                .multilineTextAlignment(.center).padding()
                         }
-                    } else if let urlString = avatarURL, let url = URL(string: urlString) {
-                        // 3. User Avatar (Cached with Kingfisher)
+                        
+                    } else if let urlString = viewModel.userAvatarURL, let url = URL(string: urlString) {
+                        // D. DYNAMIC AVATAR (Cached & Listening)
                         KFImage(url)
                             .placeholder {
-                                ProgressView()
+                                ProgressView() // Spinner while downloading
                             }
                             .cacheMemoryOnly()
-                            .diskCacheExpiration(.days(7))
+                            .diskCacheExpiration(.days(7)) // Offline Support
                             .fade(duration: 0.25)
                             .resizable()
                             .scaledToFit()
+                            .onTapGesture {
+                                // Tap avatar to zoom
+                                showZoomedImage = true
+                            }
+                        
                     } else {
-                        // 4. Fallback Placeholder
-                        defaultPlaceholder
+                        // E. PROMPT (No Avatar Found)
+                        // Shows a call-to-action to generate one
+                        Button(action: {
+                            Task { await bodyVM.generateAndSaveAvatar() }
+                        }) {
+                            VStack(spacing: 12) {
+                                if bodyVM.isGenerating {
+                                    ProgressView()
+                                    Text("Creating your twin...").font(.caption).foregroundColor(.blue)
+                                } else {
+                                    Image(systemName: "sparkles.rectangle.stack")
+                                        .font(.system(size: 50))
+                                        .foregroundColor(.blue.opacity(0.6))
+                                    
+                                    Text("Tap to Generate Avatar")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("Create a digital twin for virtual try-ons")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.gray.opacity(0.05))
+                        }
+                        .disabled(bodyVM.isGenerating)
                     }
                 }
-                // --- RETAINED CARD STYLE ---
+                // --- CARD STYLING ---
                 .frame(width: 340, height: 350)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -90,126 +114,104 @@ struct ClosetHeaderView: View {
                         .stroke(Color.primary.opacity(0.1), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 10)
-                .onLongPressGesture {
-                    // Trigger Zoom
-                    if tryOnImage != nil || avatarURL != nil {
-                        let generator = UIImpactFeedbackGenerator(style: .medium)
-                        generator.impactOccurred()
-                        showZoomedImage = true
-                    }
-                }
                 
-                // MARK: - FLOATING BUTTONS (Top Right)
-                VStack(spacing: 12) {
-                    
-                    // 1. SAVE BUTTON
-                    if tryOnImage != nil && !isGuest {
-                        Button(action: { if !isSaved { onSave?() } }) {
-                            Circle()
-                                .fill(isSaved ? Color.green : Color.white)
-                                .frame(width: 40, height: 40)
-                                .overlay(saveButtonIcon)
-                                .shadow(radius: 4)
-                        }
-                        .disabled(isSaving || isSaved)
-                    }
-                    
-                    // 2. HISTORY BUTTON
-                    if !isGuest && !viewModel.isGeneratingTryOn {
-                        Button(action: { showHistorySheet = true }) {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 40, height: 40)
-                                .overlay(Image(systemName: "clock.arrow.circlepath").foregroundColor(.blue))
-                                .shadow(radius: 4)
-                        }
-                    }
-                    
-                    // 3. CLOSE BUTTON
-                    if tryOnImage != nil || tryOnMessage != nil {
-                        Button(action: {
-                            withAnimation {
-                                tryOnImage = nil
-                                tryOnMessage = nil
-                                viewModel.isSaved = false
+                // MARK: - FLOATING CONTROLS (Top Right)
+                // Only show these if we have content or are not in the "Empty Prompt" state
+                if tryOnImage != nil || viewModel.userAvatarURL != nil {
+                    VStack(spacing: 12) {
+                        
+                        // 1. SAVE LOOK
+                        if tryOnImage != nil && !isGuest {
+                            Button(action: { if !isSaved { onSave?() } }) {
+                                CircleButton(icon: isSaved ? "checkmark" : "arrow.down.to.line",
+                                             color: isSaved ? .green : .primary,
+                                             isLoading: isSaving)
                             }
-                        }) {
-                            Circle().fill(.ultraThinMaterial).frame(width: 40, height: 40)
-                                .overlay(Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).foregroundColor(.primary))
-                                .shadow(radius: 4)
+                            .disabled(isSaving || isSaved)
                         }
-                    }
-                    
-                    // 4. GENERATE AVATAR BUTTON
-                    if !isGuest && tryOnImage == nil && tryOnMessage == nil {
-                        Button(action: { Task { await bodyVM.generateAndSaveAvatar() } }) {
-                            Circle()
-                                .fill(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        
+                        // 2. HISTORY
+                        if !isGuest && !viewModel.isGeneratingTryOn {
+                            Button(action: { showHistorySheet = true }) {
+                                CircleButton(icon: "clock.arrow.circlepath", color: .blue)
+                            }
+                        }
+                        
+                        // 3. CLOSE / RESET
+                        if tryOnImage != nil || tryOnMessage != nil {
+                            Button(action: {
+                                withAnimation {
+                                    tryOnImage = nil
+                                    tryOnMessage = nil
+                                    viewModel.isSaved = false
+                                }
+                            }) {
+                                CircleButton(icon: "xmark", color: .secondary)
+                            }
+                        }
+                        
+                        // 4. RE-GENERATE AVATAR (Small Sparkles)
+                        // Only show if we already have an avatar (to allow updating it)
+                        if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
+                            Button(action: { Task { await bodyVM.generateAndSaveAvatar() } }) {
+                                Group {
+                                    if bodyVM.isGenerating {
+                                        ProgressView().tint(.white)
+                                    } else {
+                                        Image(systemName: "sparkles").foregroundColor(.white)
+                                    }
+                                }
                                 .frame(width: 40, height: 40)
-                                .overlay(generateButtonIcon)
+                                .background(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .clipShape(Circle())
                                 .shadow(radius: 4)
+                            }
+                            .disabled(bodyVM.isGenerating)
                         }
-                        .disabled(bodyVM.isGenerating)
                     }
+                    .padding(12)
                 }
-                .padding(12)
             }
             .padding(.top, 10)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .onAppear { fetchAvatarURL() }
-        
-        // --- SHEETS ---
         .fullScreenCover(isPresented: $showZoomedImage) {
-            HeaderZoomView(image: tryOnImage, imageURL: avatarURL, onDismiss: { showZoomedImage = false })
+            HeaderZoomView(image: tryOnImage, imageURL: viewModel.userAvatarURL, onDismiss: { showZoomedImage = false })
         }
         .sheet(isPresented: $showHistorySheet) {
             HistorySheetView(viewModel: viewModel, isPresented: $showHistorySheet)
         }
     }
-    
-    // MARK: - Helpers
-    
-    private var saveButtonIcon: some View {
-        Group {
-            if isSaving { ProgressView() }
-            else if isSaved { Image(systemName: "checkmark").foregroundColor(.white) }
-            else { Image(systemName: "arrow.down.to.line").foregroundColor(.primary) }
-        }
-    }
+}
 
-    private var generateButtonIcon: some View {
-        Group {
-            if bodyVM.isGenerating { ProgressView().tint(.white) }
-            else { Image(systemName: "sparkles").foregroundColor(.white) }
-        }
-    }
+// Helper for consistent buttons
+struct CircleButton: View {
+    let icon: String
+    let color: Color
+    var isLoading: Bool = false
     
-    private var defaultPlaceholder: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "figure.arms.open").font(.system(size: 60))
-            Text("No Avatar Yet").font(.caption)
-        }
-        .foregroundColor(.gray.opacity(0.6))
-    }
-    
-    private func fetchAvatarURL() {
-        guard let userEmail = Auth.auth().currentUser?.email else { return }
-        db.collection("users").document(userEmail).addSnapshotListener { documentSnapshot, _ in
-            if let document = documentSnapshot, document.exists {
-                self.avatarURL = document.data()?["avatarURL"] as? String
-            }
-        }
+    var body: some View {
+        Circle()
+            .fill(Color.white)
+            .frame(width: 40, height: 40)
+            .overlay(
+                Group {
+                    if isLoading { ProgressView() }
+                    else { Image(systemName: icon).foregroundColor(color) }
+                }
+            )
+            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
     }
 }
 
-// MARK: - Required Subviews (Zoom & History)
+// MARK: - Helper Views
 
 struct HeaderZoomView: View {
     let image: UIImage?
-    let imageURL: String?
+    let imageURL: String? // Changed to String? to match ViewModel
     let onDismiss: () -> Void
+    
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
@@ -217,17 +219,20 @@ struct HeaderZoomView: View {
     
     var body: some View {
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all).onTapGesture { onDismiss() }
+            // Dark Background
+            Color.black.edgesIgnoringSafeArea(.all)
+                .onTapGesture { onDismiss() }
             
             GeometryReader { geometry in
                 ZStack {
                     if let img = image {
+                        // 1. Local Try-On Image
                         Image(uiImage: img)
                             .resizable()
                             .scaledToFit()
                             .frame(width: geometry.size.width, height: geometry.size.height)
                     } else if let urlStr = imageURL, let url = URL(string: urlStr) {
-                        // Cached Zoom Image
+                        // 2. Remote Avatar Image (Cached)
                         KFImage(url)
                             .resizable()
                             .scaledToFit()
@@ -236,6 +241,7 @@ struct HeaderZoomView: View {
                 }
                 .scaleEffect(scale)
                 .offset(offset)
+                // Zoom Gestures
                 .gesture(
                     MagnificationGesture()
                         .onChanged { val in
@@ -250,6 +256,7 @@ struct HeaderZoomView: View {
                             }
                         }
                 )
+                // Pan Gestures
                 .gesture(
                     DragGesture()
                         .onChanged { val in
@@ -287,6 +294,7 @@ struct HeaderZoomView: View {
 struct HistorySheetView: View {
     @ObservedObject var viewModel: ClosetViewModel
     @Binding var isPresented: Bool
+    
     let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     
     var body: some View {
@@ -320,6 +328,7 @@ struct HistorySheetView: View {
                                         }
                                     }
                                 
+                                // Context Menu for Delete
                                 Menu {
                                     Button("Delete", role: .destructive) {
                                         viewModel.deleteLook(look)

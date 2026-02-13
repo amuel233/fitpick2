@@ -71,6 +71,10 @@ class ClosetViewModel: ObservableObject {
     // AI Model
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
 
+    //Avatar Listener for closetHeaderView
+    @Published var userAvatarURL: String? = nil
+    private var userListener: ListenerRegistration?
+    
     // MARK: - MVVM View State
     
     // 1. Filter State
@@ -116,12 +120,13 @@ class ClosetViewModel: ObservableObject {
         if targetEmail == nil {
             listenToSavedLooks()
         }
-        fetchUserContext()
+        listenToUserProfile()
     }
     
     deinit {
         listener?.remove()
         historyListener?.remove()
+        userListener?.remove() // <--- Clean up
     }
     
     // MARK: - 1. Data Fetching
@@ -185,17 +190,26 @@ class ClosetViewModel: ObservableObject {
         )
     }
     
-    func fetchUserContext() {
-        guard let email = effectiveEmail else { return }
-        db.collection("users").document(email).getDocument { [weak self] doc, _ in
-            if let data = doc?.data() {
-                DispatchQueue.main.async {
-                    self?.userGender = data["gender"] as? String ?? "Male"
-                    // Helper logic if you have a User struct, otherwise just gender is fine
+    func listenToUserProfile() {
+            guard let email = effectiveEmail else { return }
+            
+            // Real-time listener: Updates instantly when Firebase changes
+            userListener = db.collection("users").document(email)
+                .addSnapshotListener { [weak self] documentSnapshot, error in
+                    guard let document = documentSnapshot, document.exists, let data = document.data() else { return }
+                    
+                    DispatchQueue.main.async {
+                        // 1. Get Avatar URL
+                        self?.userAvatarURL = data["avatarURL"] as? String
+                        
+                        // 2. Get Gender (for Try-On logic)
+                        self?.userGender = data["gender"] as? String ?? "Male"
+                        
+                        // 3. (Optional) Get other measurements if needed
+                        // self?.currentUser = ...
+                    }
                 }
-            }
         }
-    }
 
     // MARK: - 2. Virtual Try-On Logic
     
