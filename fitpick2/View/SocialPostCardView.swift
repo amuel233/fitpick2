@@ -18,6 +18,7 @@ struct SocialPostCardView: View {
     @State private var isExpanded: Bool = false
     @State private var avatarURL: String?
     @EnvironmentObject var session: UserSession
+    @State private var backgroundPrompt: String = ""
     
     @State private var generatedImage: UIImage?
     @State private var isShowingPopup = false
@@ -191,13 +192,56 @@ struct SocialPostCardView: View {
                                 Spacer()
                             }
                             
+                            Text("Describe your background here:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                            TextField("e.g. A sunset at a Paris café", text: $backgroundPrompt)
+                            .textFieldStyle(.roundedBorder) // Standard look
+                            .frame(width: 280) // Set a fixed width
+                            .padding(10)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+
+                            Button(action: {
+                                Task {
+                                    isProcessing = true // Start loading
+                                    if let uiImage = await backgroundChooser(generatedImage: generatedImage!){
+                                        self.generatedImage = uiImage
+                                        self.isShowingPopup = true
+                                    }
+                                    isProcessing = false
+                                }
+                            }) {
+                                ZStack {
+                                    if isProcessing {
+                                        // The Loading Spinner
+                                        ProgressView()
+                                            .tint(.white)
+                                            .controlSize(.regular)
+                                    } else {
+                                        // The Original Icon
+                                        Image(systemName: "sparkles")
+                                            .font(.system(size: 18, weight: .bold))
+                                    }
+                                }
+                                .frame(width: 40, height: 40) // Ensure the button size stays consistent
+                                .background(.ultraThickMaterial)
+                                .foregroundColor(.white)
+                                .clipShape(Circle())
+                                .shadow(radius: isProcessing ? 0 : 5)
+                            }
+                            .padding(12)
+                            .disabled(isProcessing)
+
+                            
                             Button("Close") {
                                 isShowingPopup = false
                             }
                             .buttonStyle(.borderedProminent)
                             .padding()
                         }
-                        .presentationDetents([.medium, .large])
+                        .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                         .presentationCornerRadius(30) // New in iOS 16.4+
                 
@@ -286,6 +330,40 @@ struct SocialPostCardView: View {
         return Text("Liked by ") + Text(names.last ?? "").bold() + Text(" and ") + Text("\(otherCount) \(otherCount == 1 ? "other" : "others")").bold()
     }
     
+    nonisolated func backgroundChooser(generatedImage: UIImage) async -> UIImage? {
+        let generativeModel = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(
+            modelName: "gemini-2.5-flash-image",
+            generationConfig: GenerationConfig(responseModalities: [.text, .image])
+        )
+
+        // Note: Use the UIImage object directly in the array to ensure
+        // the AI actually processes the image data.
+        let prompt: [any PartsRepresentable] = [
+            "This is an image that contains no background",
+            generatedImage,
+            """
+            Now, change the background of this image based on the user's description.
+            The description: \(await backgroundPrompt).
+            Change the pose of the person accordingly.
+            """
+        ]
+        
+        do {
+            let response = try await generativeModel.generateContent(prompt)
+            
+            guard let inlineDataPart = response.inlineDataParts.first,
+                  let uiImage = UIImage(data: inlineDataPart.data) else {
+                return nil
+            }
+            return uiImage
+        } catch {
+            print("Generation error: \(error)")
+            return nil
+        }
+
+    
+    }
+    
     func tryFit () async {
 
         let avatarURLx = await fetchAvatarURL(for: session.email ?? "")
@@ -301,6 +379,8 @@ struct SocialPostCardView: View {
         }
         await tryFitWithAI(avatarURL: avatartImage, postURL: postImage)
     }
+    
+    
     
     @MainActor
     func tryFitWithAI(avatarURL: UIImage, postURL: UIImage) async {
@@ -331,7 +411,8 @@ struct SocialPostCardView: View {
             Extract the exact clothing seen in Image 2 and render it onto the person in Image 1. 
             Maintain the person's pose, face, and physical characteristics from Image 1, 
             but replace their current outfit with the outfit from Image 2. 
-            The final result should be a high-quality, realistic photograph.
+            The final result should be a high-quality, realistic photograph of the person from Image 1 wearing the outfit of Image 2.
+            Keep the final output in the center of the image.
             """
         ]
 
