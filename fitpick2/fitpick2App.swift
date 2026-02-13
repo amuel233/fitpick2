@@ -10,36 +10,89 @@ import FirebaseCore
 import FirebaseAuth
 import GoogleSignIn
 import FirebaseFirestore
+import FirebaseMessaging
+import BackgroundTasks
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    let taskIdentifier = "com.fitpick.wardrobeCheck"
+    private let reminderService = WardrobeReminderService()
+    
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        Messaging.messaging().delegate = NotificationManager.shared
+        
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+            self.handleAppRefresh(task: task as! BGAppRefreshTask)
+        }
         return true
     }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+    }
+
+    func scheduleAppRefresh(at date: Date? = nil) {
+        let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
+        let minDelay = Date(timeIntervalSinceNow: 15 * 60)
+        request.earliestBeginDate = date != nil ? max(date!, minDelay) : minDelay
+        
+        // Create a formatter to show local time instead of UTC
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = .current // This converts UTC to your local clock
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            print("🚀 Next check scheduled for: \(formatter.string(from: request.earliestBeginDate!))")
+        } catch {
+            print("❌ Scheduling Error: \(error)")
+        }
+    }
+
+    func handleAppRefresh(task: BGAppRefreshTask) {
+        reminderService.runReminderCheck { nextRun in
+            self.scheduleAppRefresh(at: nextRun)
+            task.setTaskCompleted(success: true)
+        }
+        task.expirationHandler = { task.setTaskCompleted(success: false) }
+    }
     
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-        return GIDSignIn.sharedInstance.handle(url)
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return .portrait
     }
 }
 
 @main
 struct fitpick2App: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @Environment(\.scenePhase) private var scenePhase
+    
     @StateObject private var appState = AppState()
     @StateObject private var session = UserSession()
-    
+    private let reminderService = WardrobeReminderService()
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
                 .environmentObject(session)
                 .onAppear {
-                    // Link the session to appState so navigation triggers automatically
                     session.linkAppState(appState)
+                    NotificationManager.shared.requestPermissions()
                 }
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
+                }
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    if newPhase == .background {
+                        delegate.scheduleAppRefresh()
+                    }
+                    if newPhase == .active {
+                        // Log event count immediately when user returns
+                        reminderService.runReminderCheck { _ in }
+                    }
                 }
         }
     }
