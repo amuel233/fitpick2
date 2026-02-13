@@ -10,7 +10,7 @@ import FirebaseFirestore
 import FirebaseStorage
 import FirebaseAuth
 import FirebaseAILogic
-import Kingfisher // Make sure this is imported
+import Kingfisher
 
 // MARK: - Models
 
@@ -27,11 +27,9 @@ class ClosetViewModel: ObservableObject {
     // MARK: - Properties
     
     // --- Guest Mode Logic ---
-    // If targetEmail is set, we are viewing someone else's closet.
-    // If nil, we are viewing our own.
     private let targetEmail: String?
     
-    // Computed property to determine whose data to fetch (Target or Current User)
+    // Computed property to determine whose data to fetch
     private var effectiveEmail: String? {
         return targetEmail ?? Auth.auth().currentUser?.email
     }
@@ -41,7 +39,7 @@ class ClosetViewModel: ObservableObject {
     
     // --- History / Saved Looks ---
     @Published var savedLooks: [SavedLook] = []
-    @Published var isRestoringLook = false // Shows loading spinner when restoring a look
+    @Published var isRestoringLook = false
     
     // --- UI States ---
     @Published var isUploading = false         // For Add Item Spinner
@@ -54,10 +52,10 @@ class ClosetViewModel: ObservableObject {
     @Published var tryOnMessage: String? = nil
     
     // --- User Context ---
-    @Published var userGender: String = "Male" // Defaults to Male, updated via fetch
-    @Published var isSaved: Bool = false       // Tracks if current try-on is already saved
+    @Published var userGender: String = "Male"
+    @Published var isSaved: Bool = false
     
-    // Internal Tracker (Used to prevent duplicate saves)
+    // Internal Tracker
     private var currentItemsUsed: [String] = []
     
     // --- Firebase Services ---
@@ -72,20 +70,18 @@ class ClosetViewModel: ObservableObject {
 
     // MARK: - Initialization
     
-    /// Initialize with an optional targetEmail.
-    /// - Parameter targetEmail: If provided, loads that user's closet. If nil, loads current user's closet.
     init(targetEmail: String? = nil) {
         self.targetEmail = targetEmail
         
-        // 1. Fetch Clothes (For Target or Self)
+        // 1. Fetch Clothes (Target or Self)
         startFirestoreListener()
         
-        // 2. Fetch History (ONLY for Self - Privacy Rule)
+        // 2. Fetch History (ONLY for Self)
         if targetEmail == nil {
             listenToSavedLooks()
         }
         
-        // 3. Fetch Gender (For correct mannequin shape)
+        // 3. Fetch Gender
         fetchUserGender()
     }
     
@@ -94,9 +90,21 @@ class ClosetViewModel: ObservableObject {
         historyListener?.remove()
     }
     
-    // MARK: - 1. Data Fetching (Core)
+    // MARK: - 1. Data Fetching
     
-    /// Real-time listener for the "clothes" collection.
+    func fetchClothes(for email: String) {
+           // If you want a manual fetch trigger
+           db.collection("clothes")
+               .whereField("ownerEmail", isEqualTo: email)
+               .order(by: "createdat", descending: true)
+               .getDocuments { [weak self] snapshot, _ in
+                   guard let documents = snapshot?.documents else { return }
+                   DispatchQueue.main.async {
+                       self?.clothingItems = documents.compactMap { self?.mapDocumentToItem($0) }
+                   }
+               }
+       }
+    
     func startFirestoreListener() {
         guard let email = effectiveEmail else { return }
         
@@ -105,22 +113,23 @@ class ClosetViewModel: ObservableObject {
             .order(by: "createdat", descending: true)
             .addSnapshotListener { [weak self] querySnapshot, _ in
                 guard let documents = querySnapshot?.documents else { return }
-                self?.clothingItems = documents.compactMap { doc -> ClothingItem? in
-                    let data = doc.data()
-                    return ClothingItem(
-                        id: doc.documentID,
-                        image: Image(systemName: "photo"), // Placeholder
-                        uiImage: nil,
-                        category: ClothingCategory(rawValue: data["category"] as? String ?? "") ?? .top,
-                        subCategory: data["subcategory"] as? String ?? "Other",
-                        remoteURL: data["imageURL"] as? String ?? "",
-                        size: data["size"] as? String ?? "Unknown"
-                    )
-                }
+                self?.clothingItems = documents.compactMap { self?.mapDocumentToItem($0) }
             }
     }
     
-    /// Fetches gender to ensure the mannequin matches the user.
+    private func mapDocumentToItem(_ doc: QueryDocumentSnapshot) -> ClothingItem {
+        let data = doc.data()
+        return ClothingItem(
+            id: doc.documentID,
+            image: Image(systemName: "photo"),
+            uiImage: nil,
+            category: ClothingCategory(rawValue: data["category"] as? String ?? "") ?? .top,
+            subCategory: data["subcategory"] as? String ?? "Other",
+            remoteURL: data["imageURL"] as? String ?? "",
+            size: data["size"] as? String ?? "Unknown"
+        )
+    }
+    
     func fetchUserGender() {
         guard let email = effectiveEmail else { return }
         db.collection("users").document(email).getDocument { [weak self] doc, _ in
@@ -130,73 +139,57 @@ class ClosetViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 2. Virtual Try-On Logic (The Brain)
+    // MARK: - 2. Virtual Try-On Logic
     
-    /// Generates a "Ghost Mannequin" visualization.
-    /// Features:
-    /// - Validates outfit combinations (e.g., prevents 2 pants).
-    /// - Injects User GENDER and MEASUREMENTS for accurate body shape.
-    /// - Requests a visible, abstract mannequin head.
     func generateVirtualTryOn(selectedItemIDs: Set<String>) async {
         print("DEBUG: Starting Try-On Generation...")
         
-        // 1. Reset UI State
         await MainActor.run {
             isGeneratingTryOn = true
             generatedTryOnImage = nil
             tryOnMessage = nil
             tryOnSavedSuccess = false
-            isSaved = false // New generation is unsaved by default
+            isSaved = false
             currentItemsUsed = Array(selectedItemIDs)
         }
         
-        // 2. CLOTHING VALIDATION (Guardrails)
+        // Filter & Validate
         let selectedClothes = clothingItems.filter { selectedItemIDs.contains($0.id) }
         
-        // Identify "Full Body" items via string check
+        // "One-Piece" detection (Dress/Jumpsuit)
         let fullBodyItems = selectedClothes.filter { item in
             let sub = item.subCategory.lowercased()
             return sub.contains("dress") || sub.contains("jumpsuit") || sub.contains("romper") || sub.contains("gown") || sub.contains("one-piece")
         }
-        
         let fullBodyIDs = Set(fullBodyItems.map { $0.id })
         
-        // Split into categories
         let tops = selectedClothes.filter { $0.category == .top && !fullBodyIDs.contains($0.id) }
         let bottoms = selectedClothes.filter { $0.category == .bottom && !fullBodyIDs.contains($0.id) }
         let shoes = selectedClothes.filter { $0.category == .shoes }
         
-        // Rules
+        // Validation Rules
         if shoes.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 pair of shoes." }; return }
-        
         if !fullBodyItems.isEmpty {
             if !bottoms.isEmpty { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "You cannot wear a Dress and Bottoms together." }; return }
             if fullBodyItems.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Full-Body outfit." }; return }
         }
-        
         if fullBodyItems.isEmpty && bottoms.count > 1 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Bottom." }; return }
-        
         if tops.count > 2 { await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Layering Limit: Max 2 Tops." }; return }
         
-        // 3. Auth Check & Context Fetching
-        // We use effectiveEmail here to get the avatar of the closet owner
+        // Fetch User Context
         guard let email = effectiveEmail else { return }
         
         do {
-            // 4. Fetch Context Data
             let userDoc = try await db.collection("users").document(email).getDocument()
             let userData = userDoc.data()
             
-            // Get Avatar (Reference Image)
             guard let avatarURLString = userData?["avatarURL"] as? String,
                   let avatarURL = URL(string: avatarURLString) else {
-                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Avatar not found for this user." }
+                await MainActor.run { isGeneratingTryOn = false; tryOnMessage = "Avatar not found." }
                 return
             }
             
-            // Get Gender & Measurements
             let gender = userData?["gender"] as? String ?? "Neutral"
-            
             var measurementString = "Standard Average Build"
             if let m = userData?["measurements"] as? [String: Any] {
                 let h = m["height"] as? Double ?? 0
@@ -207,15 +200,14 @@ class ClosetViewModel: ObservableObject {
                 measurementString = "Height: \(h)cm, Weight: \(w)kg, Chest: \(chest)cm, Waist: \(waist)cm, Hips: \(hips)cm"
             }
             
-            // 5. Download Reference Avatar
+            // Download Avatar
             let (avatarData, _) = try await URLSession.shared.data(from: avatarURL)
             guard let rawAvatar = UIImage(data: avatarData) else { return }
             let baseAvatarImage = resizeImage(image: rawAvatar, targetSize: CGSize(width: 1024, height: 1024)) ?? rawAvatar
 
-            // 6. Construct Prompt
+            // Construct Prompt
             var promptParts: [any Part] = []
             
-            // System Instructions
             promptParts.append(TextPart("""
             ROLE: Virtual Fashion Stylist.
             TASK: Generate a high-quality fashion visualization of a mannequin wearing the selected outfit.
@@ -237,13 +229,11 @@ class ClosetViewModel: ObservableObject {
             4. BACKGROUND: Pure White (#FFFFFF).
             """))
             
-            // Append Avatar Reference
             promptParts.append(TextPart("\n\nREFERENCE IMAGE (For Skin Tone & Body Shape):"))
             if let avatarJPG = baseAvatarImage.jpegData(compressionQuality: 0.9) {
                 promptParts.append(InlineDataPart(data: avatarJPG, mimeType: "image/jpeg"))
             }
             
-            // Append Clothing Images
             promptParts.append(TextPart("\n\nGARMENTS TO WEAR:"))
             for item in selectedClothes {
                 if let url = URL(string: item.remoteURL) {
@@ -259,15 +249,12 @@ class ClosetViewModel: ObservableObject {
             
             promptParts.append(TextPart("\n\nGENERATE: The final mannequin image."))
             
-            // 7. Execute Generation
+            // Generate
             let content = ModelContent(role: "user", parts: promptParts)
             let response = try await imageGenModel.generateContent([content])
 
-            // 8. Handle Response
             if let firstCandidate = response.candidates.first {
                 var foundImage: UIImage? = nil
-                
-                // Scan for image data
                 for part in firstCandidate.content.parts {
                     if let inlineData = part as? InlineDataPart,
                        let image = UIImage(data: inlineData.data) {
@@ -276,7 +263,6 @@ class ClosetViewModel: ObservableObject {
                     }
                 }
                 
-                // Update UI
                 if let image = foundImage {
                     await MainActor.run {
                         self.generatedTryOnImage = image
@@ -299,17 +285,15 @@ class ClosetViewModel: ObservableObject {
         }
     }
     
-    // MARK: - 3. Save / Add Item Logic
+    // MARK: - 3. Add Item Logic (Manual & Smart Scan)
     
-    /// Saves a Manually Added item (From AddItemSheet)
+    /// Saves a Manually Added item
     func saveManualItem(image: UIImage, category: ClothingCategory, subCategory: String, size: String) async {
-        // ALWAYS save to current user's closet, even if viewing someone else's
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         
         await MainActor.run { isUploading = true }
         
         do {
-            // Upload
             guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
             let fileName = "\(UUID().uuidString).jpg"
             let storageRef = storage.reference().child("clothes/\(fileName)")
@@ -317,7 +301,6 @@ class ClosetViewModel: ObservableObject {
             _ = try await storageRef.putDataAsync(imageData)
             let downloadURL = try await storageRef.downloadURL()
             
-            // Save Metadata
             try await db.collection("clothes").addDocument(data: [
                 "imageURL": downloadURL.absoluteString,
                 "ownerEmail": userEmail,
@@ -328,15 +311,13 @@ class ClosetViewModel: ObservableObject {
             ])
             
             await MainActor.run { isUploading = false }
-            print("Manual item saved successfully.")
-            
         } catch {
             print("Error saving item: \(error.localizedDescription)")
             await MainActor.run { isUploading = false }
         }
     }
     
-    /// Saves an Auto-Measured item (From SmartAddItemSheet)
+    /// RESTORED: Saves an Auto-Measured item (LiDAR / Smart Scan)
     func saveAutoMeasuredItem(image: UIImage, category: String, subCategory: String, size: String, width: Double, length: Double) async {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         
@@ -353,24 +334,26 @@ class ClosetViewModel: ObservableObject {
             try await db.collection("clothes").addDocument(data: [
                 "imageURL": downloadURL.absoluteString,
                 "ownerEmail": userEmail,
-                "category": category,
+                "category": category, // String from Smart Sheet
                 "subcategory": subCategory,
                 "size": size,
-                "measurements": ["width": width, "length": length],
+                "measurements": ["width": width, "length": length], // Store raw data
                 "isAutoMeasured": true,
                 "createdat": FieldValue.serverTimestamp()
             ])
             
             await MainActor.run { isUploading = false }
+            print("Smart item saved successfully.")
+            
         } catch {
             print("Error saving smart item: \(error.localizedDescription)")
             await MainActor.run { isUploading = false }
         }
     }
     
-    /// Logic to determine size from LiDAR measurements
+    /// RESTORED: Logic to determine size from measurements
     func determineSizeFromAutoMeasurements(width: Double, length: Double, category: String, subCategory: String) async -> String {
-        // Basic Heuristic
+        // Heuristic Algorithm
         if category == "Top" {
             if width < 19 { return "S" }
             else if width < 21 { return "M" }
@@ -382,10 +365,24 @@ class ClosetViewModel: ObservableObject {
         }
         return "Unknown"
     }
+    
+    func updateItemSize(_ item: ClothingItem, newSize: String) {
+        db.collection("clothes").document(item.id).updateData(["size": newSize])
+    }
+    
+    func deleteItem(_ item: ClothingItem) {
+        // 1. UI Optimistic Update
+        DispatchQueue.main.async {
+            self.clothingItems.removeAll { $0.id == item.id }
+        }
+        // 2. Firestore
+        db.collection("clothes").document(item.id).delete()
+        // 3. Storage
+        storage.reference(forURL: item.remoteURL).delete { _ in }
+    }
 
     // MARK: - 4. History / Saved Looks Logic
     
-    /// Listens to the user's generated looks history.
     func listenToSavedLooks() {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         
@@ -413,7 +410,6 @@ class ClosetViewModel: ObservableObject {
             }
     }
     
-    /// Restores a look from history to the main viewer.
     func restoreLook(_ look: SavedLook) async {
         await MainActor.run {
             isRestoringLook = true
@@ -437,99 +433,66 @@ class ClosetViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Delete Logic (Fixed)
-        
-        /// Deletes a look with Instant UI Refresh + Cache Cleanup
-        func deleteLook(_ look: SavedLook) {
-            // 1. OPTIMISTIC UPDATE (UI)
-            // We find and remove the item INSIDE the main thread block to prevent crashes.
-            DispatchQueue.main.async {
-                withAnimation {
-                    // "removeAll" is safer than "remove(at:)" because it handles the index logic for us
-                    self.savedLooks.removeAll { $0.id == look.id }
-                }
-            }
-            
-            // 2. KINGFISHER CLEANUP (Disk Space)
-            // Remove the "dead" image from the phone's cache immediately.
-            let cacheKey = look.imageURL
-            ImageCache.default.removeImage(forKey: cacheKey)
-            
-            // 3. FIRESTORE DELETION (Database)
-            db.collection("generated_looks").document(look.id).delete() { error in
-                if let error = error {
-                    print("Error deleting from Firestore: \(error.localizedDescription)")
-                    // Optional: If server delete fails, re-fetch to restore the UI
-                    self.listenToSavedLooks()
-                }
-            }
-            
-            // 4. FIREBASE STORAGE DELETION (Cloud Storage)
-            let storageRef = storage.reference(forURL: look.imageURL)
-            storageRef.delete { error in
-                if let error = error {
-                    print("Error deleting from Firebase Storage: \(error.localizedDescription)")
-                }
+    /// Deletes a look from history with Instant UI Refresh
+    func deleteLook(_ look: SavedLook) {
+        // 1. Optimistic UI Update
+        DispatchQueue.main.async {
+            withAnimation {
+                self.savedLooks.removeAll { $0.id == look.id }
             }
         }
+        
+        // 2. Clear Cache
+        ImageCache.default.removeImage(forKey: look.imageURL)
+        
+        // 3. Delete from DB
+        db.collection("generated_looks").document(look.id).delete()
+        
+        // 4. Delete from Storage
+        storage.reference(forURL: look.imageURL).delete { _ in }
+    }
     
-    // MARK: - Save Logic (Instant Refresh Fix) 
+    /// Saves current look with Instant UI Refresh
+    func saveCurrentLook() async {
+        guard let image = generatedTryOnImage, let userEmail = Auth.auth().currentUser?.email else { return }
         
-        /// Saves the currently generated try-on to history with INSTANT UI UPDATE
-        func saveCurrentLook() async {
-            guard let image = generatedTryOnImage, let userEmail = Auth.auth().currentUser?.email else { return }
+        await MainActor.run { isSavingTryOn = true }
+        
+        do {
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+            let fileName = "generated_\(UUID().uuidString).jpg"
+            let storageRef = storage.reference().child("generated_looks/\(fileName)")
             
-            await MainActor.run { isSavingTryOn = true }
+            _ = try await storageRef.putDataAsync(imageData)
+            let downloadURL = try await storageRef.downloadURL()
             
-            do {
-                // 1. Upload Image
-                guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
-                let fileName = "generated_\(UUID().uuidString).jpg"
-                let storageRef = storage.reference().child("generated_looks/\(fileName)")
-                
-                _ = try await storageRef.putDataAsync(imageData)
-                let downloadURL = try await storageRef.downloadURL()
-                
-                // 2. Prepare Data
-                let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
-                let urlString = downloadURL.absoluteString
-                let timestamp = Date()
-                
-                // 3. OPTIMISTIC UPDATE (The Fix)
-                // Manually add to the list so the UI updates INSTANTLY
-                let newLook = SavedLook(
-                    id: customDocID,
-                    imageURL: urlString,
-                    date: timestamp,
-                    itemsUsed: currentItemsUsed
-                )
-                
-                await MainActor.run {
-                    withAnimation {
-                        // Insert at the TOP of the list
-                        self.savedLooks.insert(newLook, at: 0)
-                    }
-                }
-                
-                // 4. Save to Firestore (Server Sync)
-                try await db.collection("generated_looks").document(customDocID).setData([
-                    "imageURL": urlString,
-                    "ownerEmail": userEmail,
-                    "itemsUsed": currentItemsUsed,
-                    "createdat": FieldValue.serverTimestamp()
-                ])
-                
-                // 5. Final UI Cleanup
-                await MainActor.run {
-                    isSavingTryOn = false
-                    tryOnSavedSuccess = true
-                    isSaved = true
-                }
-            } catch {
-                print("Error saving look: \(error.localizedDescription)")
-                await MainActor.run { isSavingTryOn = false }
+            let customDocID = "\(userEmail)_\(Int(Date().timeIntervalSince1970))"
+            let urlString = downloadURL.absoluteString
+            let timestamp = Date()
+            
+            // Optimistic UI Update
+            let newLook = SavedLook(id: customDocID, imageURL: urlString, date: timestamp, itemsUsed: currentItemsUsed)
+            await MainActor.run {
+                withAnimation { self.savedLooks.insert(newLook, at: 0) }
             }
+            
+            try await db.collection("generated_looks").document(customDocID).setData([
+                "imageURL": urlString,
+                "ownerEmail": userEmail,
+                "itemsUsed": currentItemsUsed,
+                "createdat": FieldValue.serverTimestamp()
+            ])
+            
+            await MainActor.run {
+                isSavingTryOn = false
+                tryOnSavedSuccess = true
+                isSaved = true
+            }
+        } catch {
+            print("Error saving look: \(error.localizedDescription)")
+            await MainActor.run { isSavingTryOn = false }
         }
+    }
     
     // MARK: - Helpers
     
