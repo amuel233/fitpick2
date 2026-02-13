@@ -1,8 +1,8 @@
 //
 //  BulkAddItemSheet.swift
-//  fitpick2
+//  fitpick
 //
-//  Created by Bryan Gavino on 2/13/26.
+//  Created by FitPick on 2/13/26.
 //
 
 import SwiftUI
@@ -11,35 +11,29 @@ import PhotosUI
 struct BulkAddItemSheet: View {
     @Environment(\.presentationMode) var presentationMode
     
-    // Owns its own ViewModel
+    // Owns the ViewModel
     @StateObject private var vm: BulkAddItemViewModel
     
-    // Init: Takes the picked photos and triggers the load immediately
+    // Init: Takes photos and triggers load
     init(viewModel: ClosetViewModel, pickerItems: [PhotosPickerItem]) {
         let bulkVM = BulkAddItemViewModel(closetVM: viewModel)
         _vm = StateObject(wrappedValue: bulkVM)
         
-        // Trigger loading the images right when the view is created
+        // Trigger load
         bulkVM.loadImages(from: pickerItems)
     }
     
     var body: some View {
         NavigationStack {
             VStack {
-                // STATE 1: Loading
                 if vm.isLoadingImages {
                     ProgressView("Processing Photos...")
                         .scaleEffect(1.5)
-                }
-                // STATE 2: Empty
-                else if vm.draftItems.isEmpty {
+                } else if vm.draftItems.isEmpty {
                     ContentUnavailableView("No Images Loaded", systemImage: "photo.on.rectangle.angled")
-                }
-                // STATE 3: List of Items
-                else {
+                } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            // Binding ($) allows editing text fields inside the row
                             ForEach($vm.draftItems) { $item in
                                 BulkItemRow(item: $item) {
                                     withAnimation { vm.removeDraft(id: item.id) }
@@ -47,17 +41,14 @@ struct BulkAddItemSheet: View {
                             }
                         }
                         .padding()
-                        // Add extra padding at bottom so save button doesn't cover last item
                         .padding(.bottom, 80)
                     }
                 }
             }
-            // MARK: - Footer (Save Button)
             .overlay(alignment: .bottom) {
                 if !vm.draftItems.isEmpty {
                     VStack(spacing: 10) {
                         if vm.isSaving {
-                            // Progress Indicator
                             HStack {
                                 ProgressView()
                                 Text("Saving \(vm.saveProgress) of \(vm.draftItems.filter({$0.isClothing}).count)...")
@@ -66,7 +57,6 @@ struct BulkAddItemSheet: View {
                             .background(.ultraThinMaterial)
                             .cornerRadius(12)
                         } else {
-                            // Main Action
                             Button(action: {
                                 vm.saveAllValidItems {
                                     presentationMode.wrappedValue.dismiss()
@@ -81,14 +71,11 @@ struct BulkAddItemSheet: View {
                                     .cornerRadius(12)
                                     .shadow(radius: 5)
                             }
-                            // Disable if nothing is valid (e.g. all cars)
                             .disabled(vm.draftItems.filter { $0.isClothing }.isEmpty)
                         }
                     }
                     .padding()
-                    .background(
-                        LinearGradient(colors: [.white.opacity(0), .white], startPoint: .top, endPoint: .bottom)
-                    )
+                    .background(LinearGradient(colors: [.white.opacity(0), .white], startPoint: .top, endPoint: .bottom))
                 }
             }
             .navigationTitle("Review Items")
@@ -97,8 +84,6 @@ struct BulkAddItemSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
-                
-                // MARK: - Quick Actions Menu
                 ToolbarItem(placement: .primaryAction) {
                     Menu("Quick Set") {
                         Button("Set All to Tops") { withAnimation { vm.applyCategoryToAll(.top) } }
@@ -111,29 +96,26 @@ struct BulkAddItemSheet: View {
     }
 }
 
-// MARK: - The Row Component
+// MARK: - Row Component
 struct BulkItemRow: View {
     @Binding var item: DraftItem
     var onDelete: () -> Void
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            // 1. Thumbnail Image
+            // Thumbnail
             Image(uiImage: item.image)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 80, height: 80)
                 .cornerRadius(8)
                 .overlay(
-                    // RED BORDER if invalid
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(item.isClothing ? Color.clear : Color.red, lineWidth: 3)
                 )
             
-            // 2. Form Fields
+            // Fields
             VStack(alignment: .leading, spacing: 8) {
-                
-                // Status Header
                 if item.isValidating {
                     Text("Validating...").font(.caption).foregroundColor(.gray)
                 } else if !item.isClothing {
@@ -141,7 +123,6 @@ struct BulkItemRow: View {
                         .font(.caption).foregroundColor(.red).bold()
                 }
                 
-                // Category & Delete Row
                 HStack {
                     Picker("Cat", selection: $item.category) {
                         ForEach(ClothingCategory.allCases, id: \.self) { cat in
@@ -159,7 +140,6 @@ struct BulkItemRow: View {
                     }
                 }
                 
-                // Text Inputs
                 HStack {
                     TextField("Type (e.g. Jeans)", text: $item.subCategory)
                         .textFieldStyle(.roundedBorder)
@@ -176,7 +156,6 @@ struct BulkItemRow: View {
         .background(Color.white)
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
-        // Dim the row if it's invalid so the user focuses on the good ones
         .opacity(item.isClothing ? 1.0 : 0.6)
     }
 }
