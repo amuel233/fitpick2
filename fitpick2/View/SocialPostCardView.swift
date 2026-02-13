@@ -197,6 +197,10 @@ struct SocialPostCardView: View {
                             .buttonStyle(.borderedProminent)
                             .padding()
                         }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                        .presentationCornerRadius(30) // New in iOS 16.4+
+                
                     }.animation(.default, value: isProcessing)
 
             // --- INTERACTION SECTION ---
