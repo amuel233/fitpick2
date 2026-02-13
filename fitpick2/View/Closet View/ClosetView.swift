@@ -322,58 +322,28 @@ struct ZoomOverlayView: View {
     let item: ClothingItem
     let onDismiss: () -> Void
     let isOwner: Bool
-
+    
     var body: some View {
         ZStack {
-            // Dark Background
-            Color.black.opacity(0.9)
-                .ignoresSafeArea()
-                .onTapGesture(perform: onDismiss)
-
-            // Content
+            Color.black.opacity(0.9).ignoresSafeArea().onTapGesture(perform: onDismiss)
             VStack(spacing: 20) {
-                // Large Image
-                KFImage(URL(string: item.remoteURL))
-                    .resizable()
+                // UPDATED: Use Cached Helper
+                CachedImageView(urlString: item.remoteURL)
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding()
                     .shadow(radius: 10)
-
-                // Info Text
+                
                 VStack(spacing: 8) {
-                    Text(item.subCategory)
-                        .font(.title2.bold())
-                        .foregroundColor(.white)
-                    
+                    Text(item.subCategory).font(.title2.bold()).foregroundColor(.white)
                     if !item.size.isEmpty {
-                        HStack(spacing: 10) {
-                            Text("Size: \(item.size)")
-                                .font(.headline)
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 12)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(10)
+                        Text("Size: \(item.size)").font(.headline).foregroundColor(.gray)
+                            .padding(.vertical, 4).padding(.horizontal, 12)
+                            .background(Color.white.opacity(0.1)).cornerRadius(10)
                     }
                 }
             }
-
-            // Close Button (Top Right)
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                            .padding()
-                            .padding(.top, 40) // Adjust for safe area
-                    }
-                }
-                Spacer()
-            }
+            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark.circle.fill").font(.largeTitle).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer() }
         }
     }
 }
@@ -388,12 +358,8 @@ struct InventoryItemCard: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Image
-            KFImage(URL(string: item.remoteURL))
-                .placeholder { Color.gray.opacity(0.1) }
-                .cacheOriginalImage()
-                .resizable()
-                .scaledToFill()
+            // UPDATED: Use Cached Helper
+            CachedImageView(urlString: item.remoteURL)
                 .frame(minWidth: 0, maxWidth: .infinity)
                 .frame(height: 140)
                 .clipped()
@@ -402,12 +368,10 @@ struct InventoryItemCard: View {
                 .onTapGesture(perform: onTap)
                 .onLongPressGesture(perform: onLongPress)
             
-            // Selection Checkmark
             if isSelected {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.blue, lineWidth: 3)
                     .frame(height: 140)
-                
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title3)
                     .foregroundColor(.blue)
@@ -415,7 +379,6 @@ struct InventoryItemCard: View {
                     .padding(4)
             }
             
-            // Size Badge
             if !item.size.isEmpty {
                 Text(item.size)
                     .font(.caption2.bold())
@@ -426,7 +389,6 @@ struct InventoryItemCard: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             
-            // Delete Button (Only for owner, when not selecting)
             if isOwner && !isSelected {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")

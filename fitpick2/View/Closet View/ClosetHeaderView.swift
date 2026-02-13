@@ -8,13 +8,14 @@
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
+import Kingfisher
 
 struct ClosetHeaderView: View {
     // MARK: - Properties
     
     @ObservedObject var viewModel: ClosetViewModel
     
-    // ViewModel for Avatar Generation (Locally needed for the button)
+    // We assume this view model exists as it was in your previous file
     @StateObject private var bodyVM = BodyMeasurementViewModel()
     @State private var avatarURL: String? = nil
     
@@ -42,39 +43,41 @@ struct ClosetHeaderView: View {
                 
                 // MARK: - IMAGE HOLDER
                 ZStack {
-                    // White background makes the "fit" image look seamless (no bars)
+                    // White background makes the "fit" image look seamless
                     Color.white
                     
                     if viewModel.isRestoringLook {
-                        ProgressView("Loading...")
+                        ProgressView("Loading Look...")
+                            .scaleEffect(0.8)
                     } else if let tryOn = tryOnImage {
-                        // 1. Try-On Result
+                        // 1. Try-On Result (Generated Image)
                         Image(uiImage: tryOn)
                             .resizable()
-                            .scaledToFit() // CRITICAL: Ensures head/feet are never cut
-                            // No padding: allows image to touch edges for max size
+                            .scaledToFit()
                     } else if let message = tryOnMessage {
                         // 2. Error Message
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.largeTitle).foregroundColor(.orange)
-                            Text(message).font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
+                            Text(message)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                         }
-                        .padding()
                     } else if let urlString = avatarURL, let url = URL(string: urlString) {
-                        // 3. Base Avatar (AsyncImage)
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFit() // CRITICAL: Changed from 'Fill' to 'Fit' to prevent cropping
-                            default:
-                                defaultPlaceholder
+                        // 3. User Avatar (Cached with Kingfisher)
+                        KFImage(url)
+                            .placeholder {
+                                ProgressView()
                             }
-                        }
+                            .cacheMemoryOnly()
+                            .diskCacheExpiration(.days(7))
+                            .fade(duration: 0.25)
+                            .resizable()
+                            .scaledToFit()
                     } else {
-                        // 4. Fallback
+                        // 4. Fallback Placeholder
                         defaultPlaceholder
                     }
                 }
@@ -203,8 +206,6 @@ struct ClosetHeaderView: View {
 
 // MARK: - Required Subviews (Zoom & History)
 
-// (These structs are required for the functionality to work. Keep them in the file.)
-
 struct HeaderZoomView: View {
     let image: UIImage?
     let imageURL: String?
@@ -213,28 +214,72 @@ struct HeaderZoomView: View {
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    
     var body: some View {
         ZStack {
-            Color(uiColor: .systemGroupedBackground).edgesIgnoringSafeArea(.all).onTapGesture { onDismiss() }
+            Color.black.edgesIgnoringSafeArea(.all).onTapGesture { onDismiss() }
+            
             GeometryReader { geometry in
                 ZStack {
-                    if let img = image { Image(uiImage: img).resizable().scaledToFit().frame(width: geometry.size.width, height: geometry.size.height) }
-                    else if let urlStr = imageURL, let url = URL(string: urlStr) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image): image.resizable().scaledToFit().frame(width: geometry.size.width, height: geometry.size.height)
-                            case .failure: Image(systemName: "photo").foregroundColor(.gray)
-                            case .empty: ProgressView().tint(.gray)
-                            @unknown default: EmptyView()
-                            }
-                        }
+                    if let img = image {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                    } else if let urlStr = imageURL, let url = URL(string: urlStr) {
+                        // Cached Zoom Image
+                        KFImage(url)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
                     }
                 }
-                .scaleEffect(scale).offset(offset)
-                .gesture(MagnificationGesture().onChanged { val in let delta = val / lastScale; lastScale = val; scale = max(1.0, scale * delta) }.onEnded { _ in lastScale = 1.0; withAnimation { if scale < 1.0 { scale = 1.0; offset = .zero } } })
-                .gesture(DragGesture().onChanged { val in if scale > 1.0 { offset = CGSize(width: lastOffset.width + val.translation.width, height: lastOffset.height + val.translation.height) } }.onEnded { _ in if scale > 1.0 { lastOffset = offset } })
+                .scaleEffect(scale)
+                .offset(offset)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { val in
+                            let delta = val / lastScale
+                            lastScale = val
+                            scale = max(1.0, scale * delta)
+                        }
+                        .onEnded { _ in
+                            lastScale = 1.0
+                            withAnimation {
+                                if scale < 1.0 { scale = 1.0; offset = .zero }
+                            }
+                        }
+                )
+                .gesture(
+                    DragGesture()
+                        .onChanged { val in
+                            if scale > 1.0 {
+                                offset = CGSize(
+                                    width: lastOffset.width + val.translation.width,
+                                    height: lastOffset.height + val.translation.height
+                                )
+                            }
+                        }
+                        .onEnded { _ in
+                            if scale > 1.0 { lastOffset = offset }
+                        }
+                )
             }
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundColor(.gray).padding().padding(.top, 40) } }; Spacer() }
+            
+            // Close Button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                            .padding()
+                            .padding(.top, 40)
+                    }
+                }
+                Spacer()
+            }
         }
     }
 }
@@ -249,32 +294,36 @@ struct HistorySheetView: View {
             ScrollView {
                 if viewModel.savedLooks.isEmpty {
                     VStack(spacing: 20) {
-                        Image(systemName: "clock").font(.system(size: 50)).foregroundColor(.gray)
-                        Text("No saved looks yet").font(.headline).foregroundColor(.gray)
+                        Image(systemName: "clock")
+                            .font(.system(size: 50))
+                            .foregroundColor(.gray)
+                        Text("No saved looks yet")
+                            .font(.headline)
+                            .foregroundColor(.gray)
                     }
                     .padding(.top, 100)
                 } else {
                     LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(viewModel.savedLooks) { look in
                             ZStack(alignment: .topTrailing) {
-                                AsyncImage(url: URL(string: look.imageURL)) { phase in
-                                    if let image = phase.image {
-                                        image.resizable().scaledToFill()
-                                    } else {
-                                        Color.gray.opacity(0.1)
+                                // Cached History Image
+                                KFImage(URL(string: look.imageURL))
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 150)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        Task {
+                                            await viewModel.restoreLook(look)
+                                            isPresented = false
+                                        }
                                     }
-                                }
-                                .frame(height: 150)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .onTapGesture {
-                                    Task {
-                                        await viewModel.restoreLook(look)
-                                        isPresented = false
-                                    }
-                                }
                                 
                                 Menu {
-                                    Button("Delete", role: .destructive) { viewModel.deleteLook(look) }
+                                    Button("Delete", role: .destructive) {
+                                        viewModel.deleteLook(look)
+                                    }
                                 } label: {
                                     Image(systemName: "ellipsis.circle.fill")
                                         .foregroundColor(.white)
@@ -292,7 +341,9 @@ struct HistorySheetView: View {
             .navigationTitle("Look History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { isPresented = false } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { isPresented = false }
+                }
             }
         }
     }
