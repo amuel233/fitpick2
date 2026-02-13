@@ -115,62 +115,66 @@ struct ClosetHeaderView: View {
                 )
                 .shadow(color: .black.opacity(0.1), radius: 15, x: 0, y: 10)
                 
-                // MARK: - FLOATING CONTROLS (Top Right)
-                // Only show these if we have content or are not in the "Empty Prompt" state
-                if tryOnImage != nil || viewModel.userAvatarURL != nil {
-                    VStack(spacing: 12) {
-                        
-                        // 1. SAVE LOOK
-                        if tryOnImage != nil && !isGuest {
-                            Button(action: { if !isSaved { onSave?() } }) {
-                                CircleButton(icon: isSaved ? "checkmark" : "arrow.down.to.line",
-                                             color: isSaved ? .green : .primary,
-                                             isLoading: isSaving)
-                            }
-                            .disabled(isSaving || isSaved)
-                        }
-                        
-                        // 2. HISTORY
-                        if !isGuest && !viewModel.isGeneratingTryOn {
-                            Button(action: { showHistorySheet = true }) {
-                                CircleButton(icon: "clock.arrow.circlepath", color: .blue)
-                            }
-                        }
-                        
-                        // 3. CLOSE / RESET
-                        if tryOnImage != nil || tryOnMessage != nil {
-                            Button(action: {
-                                withAnimation {
-                                    tryOnImage = nil
-                                    tryOnMessage = nil
-                                    viewModel.isSaved = false
+    // MARK: - FLOATING CONTROLS (Top Right)
+                    // Only show these if we have content OR an avatar exists
+                    if tryOnImage != nil || viewModel.userAvatarURL != nil {
+                        VStack(spacing: 12) {
+                            
+                            // 1. SAVE LOOK (Only when a new Try-On is visible)
+                            if tryOnImage != nil && !isGuest {
+                                Button(action: { if !isSaved { onSave?() } }) {
+                                    CircleButton(
+                                        icon: isSaved ? "checkmark" : "arrow.down.to.line",
+                                        color: isSaved ? .green : .primary,
+                                        isLoading: isSaving
+                                    )
                                 }
-                            }) {
-                                CircleButton(icon: "xmark", color: .secondary)
+                                .disabled(isSaving || isSaved)
                             }
-                        }
-                        
-                        // 4. RE-GENERATE AVATAR (Small Sparkles)
-                        // Only show if we already have an avatar (to allow updating it)
-                        if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
-                            Button(action: { Task { await bodyVM.generateAndSaveAvatar() } }) {
-                                Group {
-                                    if bodyVM.isGenerating {
-                                        ProgressView().tint(.white)
-                                    } else {
-                                        Image(systemName: "sparkles").foregroundColor(.white)
+                            
+                            // 2. SAVED LOOKS / GALLERY (Replaced Clock with Photo Stack)
+                            if !isGuest && !viewModel.isGeneratingTryOn {
+                                Button(action: { showHistorySheet = true }) {
+                                    // "photo.stack" looks like a Gallery/Lookbook
+                                    CircleButton(icon: "photo.stack", color: .blue)
+                                }
+                            }
+                            
+                            // 3. CLOSE / RESET (Only when viewing a Try-On)
+                            if tryOnImage != nil || tryOnMessage != nil {
+                                Button(action: {
+                                    withAnimation {
+                                        tryOnImage = nil
+                                        tryOnMessage = nil
+                                        viewModel.isSaved = false
                                     }
+                                }) {
+                                    CircleButton(icon: "xmark", color: .secondary)
                                 }
-                                .frame(width: 40, height: 40)
-                                .background(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .clipShape(Circle())
-                                .shadow(radius: 4)
                             }
-                            .disabled(bodyVM.isGenerating)
+                            
+                            // 4. UPDATE AVATAR (Small Sparkles)
+                            // Only show if we are NOT viewing a Try-On, but we HAVE an avatar.
+                            // This allows the user to "Re-roll" or update their digital twin.
+                            if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
+                                Button(action: { Task { await bodyVM.generateAndSaveAvatar() } }) {
+                                    Group {
+                                        if bodyVM.isGenerating {
+                                            ProgressView().tint(.white)
+                                        } else {
+                                            Image(systemName: "sparkles").foregroundColor(.white)
+                                        }
+                                    }
+                                    .frame(width: 40, height: 40)
+                                    .background(LinearGradient(colors: [.purple, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                                }
+                                .disabled(bodyVM.isGenerating)
+                            }
                         }
+                        .padding(12)
                     }
-                    .padding(12)
-                }
             }
             .padding(.top, 10)
         }
