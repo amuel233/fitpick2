@@ -14,6 +14,7 @@ import Kingfisher
 // MARK: - Image Validation (Anti-Hallucination)
 import Vision // Ensure this is imported at the top
 
+
 // MARK: - Models
 
 /// Represents a previously generated outfit saved in Firestore history
@@ -70,6 +71,35 @@ class ClosetViewModel: ObservableObject {
     // AI Model
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
 
+// MARK: - MVVM View State (Added)
+    
+    // 1. Filter State
+    @Published var selectedCategory: ClothingCategory? = nil
+    
+    // 2. Selection State
+    @Published var selectedItemIDs: Set<String> = []
+    
+    // 3. Computed Data for Grid
+    // The View just asks for "filteredItems" and gets the correct list instantly.
+    var filteredItems: [ClothingItem] {
+        guard let category = selectedCategory else { return clothingItems }
+        return clothingItems.filter { $0.category == category }
+    }
+    
+    // 4. Intents (Actions)
+    func toggleSelection(_ item: ClothingItem) {
+        if selectedItemIDs.contains(item.id) {
+            selectedItemIDs.remove(item.id)
+        } else {
+            selectedItemIDs.insert(item.id)
+        }
+    }
+    
+    func clearSelection() {
+        selectedItemIDs.removeAll()
+    }
+
+    
     // MARK: - Initialization
     
     init(targetEmail: String? = nil) {
