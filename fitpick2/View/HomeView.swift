@@ -639,22 +639,25 @@ final class HomeViewModel: ObservableObject {
         let preferred = UserDefaults.standard.string(forKey: "preferredCalendarProvider")
         // Local-first fallback: prefer iOS Calendar when user hasn't explicitly chosen Google
         if preferred == "google" {
-            calendar.fetchNextEventDetail { [weak self] event, date in
-                guard let self = self, let event = event else { return }
-                DispatchQueue.main.async { self.handleCalendarEvent(event: event, date: date) }
+            calendar.fetchUpcomingEvents(daysAhead: 0) { [weak self] items in
+                guard let self = self else { return }
+                if let first = items.first {
+                    DispatchQueue.main.async { self.handleCalendarEvent(event: first.0, date: first.2) }
+                }
             }
         } else {
             // Try local calendar first; if nothing found, fall back to Google-managed calendar
             let local = LocalCalendarManager()
-            local.fetchNextEventDetail { [weak self] event, date in
+            local.fetchAllUpcomingEvents { [weak self] events in
                 guard let self = self else { return }
-                if let event = event {
-                    DispatchQueue.main.async { self.handleCalendarEvent(event: event, date: date) }
+                if let first = events.first {
+                    let title = first.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? first.notes! : (first.title ?? "Event")
+                    DispatchQueue.main.async { self.handleCalendarEvent(event: title, date: first.startDate) }
                 } else {
-                    // Fallback to Google calendar if local yielded nothing
-                    self.calendar.fetchNextEventDetail { event2, date2 in
-                        guard let event2 = event2 else { return }
-                        DispatchQueue.main.async { self.handleCalendarEvent(event: event2, date: date2) }
+                    self.calendar.fetchUpcomingEvents(daysAhead: 0) { items in
+                        if let first = items.first {
+                            DispatchQueue.main.async { self.handleCalendarEvent(event: first.0, date: first.2) }
+                        }
                     }
                 }
             }
@@ -732,7 +735,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
 }
-
+/*
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
@@ -744,3 +747,4 @@ struct HomeView_Previews: PreviewProvider {
         }
     }
 }
+*/

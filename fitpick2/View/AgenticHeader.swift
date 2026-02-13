@@ -23,7 +23,36 @@ struct AgenticHeader: View {
             if vm.isConnected {
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 8) {
-                        if let event = vm.nextEvent {
+                        // If there are multiple upcoming events within the selected window, present a chooser
+                        if vm.upcomingEvents.count > 1 {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Picker(selection: $vm.selectedEventIndex, label:
+                                    Text(vm.upcomingEvents.indices.contains(vm.selectedEventIndex) ? vm.upcomingEvents[vm.selectedEventIndex] : "Upcoming event")
+                                        .font(.title3.weight(.bold))
+                                        .lineLimit(1)
+                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, 12)
+                                        .background(Color("fitPickGold"))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
+                                ) {
+                                    ForEach(vm.upcomingEvents.indices, id: \.self) { idx in
+                                        Text(vm.upcomingEvents[idx])
+                                            .font(.body.weight(.bold))
+                                            .tag(idx)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 2)
+
+                                if vm.upcomingEventDates.indices.contains(vm.selectedEventIndex), let date = vm.upcomingEventDates[vm.selectedEventIndex] {
+                                    Text(vm.formatDateTime(date))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        } else if let event = vm.upcomingEvents.first ?? vm.nextEvent {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Upcoming event: \(event)")
                                     .font(.headline.weight(.semibold))
@@ -38,6 +67,12 @@ struct AgenticHeader: View {
                         } else {
                             Text("No upcoming events")
                                 .font(.headline.weight(.semibold))
+                                .foregroundColor(.secondary)
+                        }
+
+                        if vm.upcomingEvents.count > 0 {
+                            Text("\(vm.upcomingEvents.count) upcoming event\(vm.upcomingEvents.count == 1 ? "" : "s")")
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
 
@@ -122,6 +157,15 @@ struct AgenticHeader: View {
             }
         } // Ends Group
         .frame(minHeight: 140)
+        .onChange(of: vm.selectedEventIndex) { newIndex in
+            guard vm.upcomingEvents.indices.contains(newIndex) else { return }
+            let event = vm.upcomingEvents[newIndex]
+            let date = vm.upcomingEventDates.indices.contains(newIndex) ? vm.upcomingEventDates[newIndex] : nil
+            // Update local published fields so UI reflects the selection immediately
+            vm.nextEvent = event
+            vm.nextEventDate = date ?? vm.nextEventDate
+            NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+        }
         .onAppear {
             vm.fetchStatus()
 
@@ -129,13 +173,16 @@ struct AgenticHeader: View {
             // so the style gap can default to the next event without forcing sign-in.
             if UserDefaults.standard.string(forKey: "preferredCalendarProvider") == nil {
                 let local = LocalCalendarManager()
-                local.fetchNextEventDetail { event, date in
-                    if let event = event {
+                local.fetchAllUpcomingEvents { events in
+                    if let first = events.first {
+                        let title = first.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? first.notes! : (first.title ?? "Event")
                         DispatchQueue.main.async {
-                            vm.nextEvent = event
-                            vm.nextEventDate = date
-                            if !event.isEmpty {
-                                NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                            vm.upcomingEvents = events.map { ($0.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? $0.notes! : ($0.title ?? "Event")) }
+                            vm.upcomingEventDates = events.map { $0.startDate }
+                            vm.nextEvent = title
+                            vm.nextEventDate = first.startDate
+                            if !title.isEmpty {
+                                NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": title, "eventDate": first.startDate as Any])
                             }
                         }
                     }
@@ -227,6 +274,19 @@ final class AgenticHeaderViewModel: ObservableObject {
     @Published var signedInEmail: String? = nil
     @Published var morningGreeting: String? = nil
     @Published var preferredProvider: String? = nil
+    // Expose multiple upcoming events for the next window (e.g., today)
+    @Published var upcomingEvents: [String] = []
+    @Published var upcomingEventDates: [Date?] = []
+    @Published var selectedEventIndex: Int = 0 {
+        didSet {
+            // When user picks a different event, notify the rest of the app
+            if upcomingEvents.indices.contains(selectedEventIndex) {
+                let event = upcomingEvents[selectedEventIndex]
+                let date = upcomingEventDates.indices.contains(selectedEventIndex) ? upcomingEventDates[selectedEventIndex] : nil
+                NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+            }
+        }
+    }
     private let weather = WeatherManager()
     
     private let calendar = CalendarManager()
@@ -241,15 +301,19 @@ final class AgenticHeaderViewModel: ObservableObject {
     
     /// Refresh the next event and header appearance without triggering sign-in flows.
     func refreshEvents() {
-        calendar.fetchNextEventDetail { [weak self] event, date in
+        calendar.fetchUpcomingEvents(daysAhead: 0) { [weak self] items in
             DispatchQueue.main.async {
-                self?.nextEvent = event
-                self?.nextEventDate = date
-                self?.aiSummary = nil
-                self?.updateGreeting()
-                self?.updateHeaderAppearance()
-                if let event = event, !event.isEmpty {
-                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                guard let self = self else { return }
+                self.aiSummary = nil
+                self.updateGreeting()
+                self.updateHeaderAppearance()
+
+                self.upcomingEvents = items.map { $0.0 }
+                self.upcomingEventDates = items.map { $0.2 }
+                if let first = self.upcomingEvents.first {
+                    self.nextEvent = first
+                    self.nextEventDate = self.upcomingEventDates.first ?? nil
+                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": first, "eventDate": self.nextEventDate as Any])
                 }
             }
         }
@@ -382,17 +446,18 @@ final class AgenticHeaderViewModel: ObservableObject {
             DispatchQueue.main.async { self?.isConnected = true }
 
             let email = signInResult?.user.profile?.email
-            self?.calendar.fetchNextEventDetail { event, date in
+            self?.calendar.fetchUpcomingEvents(daysAhead: 0) { items in
                 DispatchQueue.main.async {
-                            self?.nextEvent = event
-                            self?.nextEventDate = date
-                            self?.weatherIconName = "cloud.sun"
-                            // Do not synthesize an additional description on sync; surface only calendar-provided text
-                            self?.aiSummary = nil
-                    self?.updateGreeting()
-                    // Notify other parts of the app (HomeViewModel) about calendar update only when an event exists
-                    if let event = event, !event.isEmpty {
-                        NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                    guard let self = self else { return }
+                    self.upcomingEvents = items.map { $0.0 }
+                    self.upcomingEventDates = items.map { $0.2 }
+                    self.weatherIconName = "cloud.sun"
+                    self.aiSummary = nil
+                    self.updateGreeting()
+                    if let first = self.upcomingEvents.first {
+                        self.nextEvent = first
+                        self.nextEventDate = self.upcomingEventDates.first ?? nil
+                        NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": first, "eventDate": self.nextEventDate as Any])
                     }
                     completion(.success(SignInInfo(email: email)))
                 }
@@ -402,16 +467,19 @@ final class AgenticHeaderViewModel: ObservableObject {
 
     func connectLocalCalendar(completion: @escaping (Result<SignInInfo, Error>) -> Void) {
         let local = LocalCalendarManager()
-        local.fetchNextEventDetail { [weak self] event, date in
+        local.fetchAllUpcomingEvents { [weak self] events in
             DispatchQueue.main.async {
-                self?.isConnected = true
-                self?.nextEvent = event
-                self?.nextEventDate = date
-                self?.weatherIconName = "cloud.sun"
-                self?.aiSummary = nil
-                self?.updateGreeting()
-                if let event = event, !event.isEmpty {
-                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                guard let self = self else { return }
+                self.isConnected = true
+                self.upcomingEvents = events.map { ($0.notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? $0.notes! : ($0.title ?? "Event")) }
+                self.upcomingEventDates = events.map { $0.startDate }
+                self.nextEvent = self.upcomingEvents.first
+                self.nextEventDate = self.upcomingEventDates.first ?? nil
+                self.weatherIconName = "cloud.sun"
+                self.aiSummary = nil
+                self.updateGreeting()
+                if let first = self.nextEvent, !first.isEmpty {
+                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": first, "eventDate": self.nextEventDate as Any])
                 }
                 completion(.success(SignInInfo(email: nil)))
             }
@@ -442,14 +510,17 @@ final class AgenticHeaderViewModel: ObservableObject {
     
     private func performStubbedConnect(completion: @escaping (Result<SignInInfo, Error>) -> Void) {
         isConnected = true
-        calendar.fetchNextEventDetail { [weak self] event, date in
+        calendar.fetchUpcomingEvents(daysAhead: 0) { [weak self] items in
             DispatchQueue.main.async {
-                self?.nextEvent = event
-                self?.nextEventDate = date
-                self?.aiSummary = nil
-                self?.updateGreeting()
-                if let event = event, !event.isEmpty {
-                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
+                guard let self = self else { return }
+                self.upcomingEvents = items.map { $0.0 }
+                self.upcomingEventDates = items.map { $0.2 }
+                self.nextEvent = self.upcomingEvents.first
+                self.nextEventDate = self.upcomingEventDates.first ?? nil
+                self.aiSummary = nil
+                self.updateGreeting()
+                if let first = self.nextEvent, !first.isEmpty {
+                    NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": first, "eventDate": self.nextEventDate as Any])
                 }
                 completion(.success(SignInInfo(email: nil)))
             }
