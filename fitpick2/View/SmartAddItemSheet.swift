@@ -23,7 +23,7 @@ struct SmartAddItemSheet: View {
     // Auto-Measure State (Populated by the Camera View)
     @State private var measuredWidth: Double?
     @State private var measuredLength: Double?
-    @State private var capturedImage: UIImage? // The snapshot from the camera
+    @State private var capturedImage: UIImage?
     @State private var isScanning = false
     @State private var isAnalyzingAI = false
 
@@ -42,13 +42,16 @@ struct SmartAddItemSheet: View {
                                 .cornerRadius(12)
                                 .shadow(radius: 5)
                         } else {
-                            // Live LiDAR Camera View
-                            // Note: You need to implement AutoMeasureCameraView separately
-                            // For now, this is a placeholder if you haven't added that file yet.
-                            Text("Camera View Placeholder")
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(Color.black)
-                                .foregroundColor(.white)
+                            // --- HERE IS THE FIX ---
+                            // We replaced the placeholder Text with your actual Camera View
+                            AutoMeasureCameraView(
+                                measuredWidth: $measuredWidth,
+                                measuredLength: $measuredLength,
+                                capturedImage: $capturedImage,
+                                isScanning: $isScanning
+                            )
+                            .cornerRadius(12)
+                            // -----------------------
                             
                             // Guide Overlay
                             VStack {
@@ -73,15 +76,12 @@ struct SmartAddItemSheet: View {
                     if isScanning {
                         VStack {
                             ProgressView()
-                            Text("Holding still to measure...").font(.caption).foregroundColor(.secondary)
+                            Text("Analyzing...").font(.caption).foregroundColor(.secondary)
                         }
                     } else if capturedImage == nil {
                         // Start Scan Button
                         Button(action: {
-                            // SIMULATION FOR TESTING (Remove this and use real camera logic later)
-                            self.capturedImage = UIImage(systemName: "tshirt")
-                            self.measuredWidth = 20.5
-                            self.measuredLength = 28.0
+                            isScanning = true
                         }) {
                             VStack {
                                 Image(systemName: "circle.inset.filled")
@@ -170,7 +170,6 @@ struct SmartAddItemSheet: View {
                             }
                         }
                         
-                        // Save Button inside Form
                         Button(action: saveSmartItem) {
                             Text("Save to Closet")
                                 .frame(maxWidth: .infinity, alignment: .center)
@@ -184,7 +183,6 @@ struct SmartAddItemSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    // FIX: Use presentationMode
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
             }
@@ -203,7 +201,6 @@ struct SmartAddItemSheet: View {
                     width: w,
                     length: l
                 )
-                // FIX: Use presentationMode
                 presentationMode.wrappedValue.dismiss()
             }
         }

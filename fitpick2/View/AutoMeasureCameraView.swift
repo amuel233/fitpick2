@@ -13,13 +13,14 @@ struct AutoMeasureCameraView: UIViewRepresentable {
     @Binding var measuredWidth: Double?
     @Binding var measuredLength: Double?
     @Binding var capturedImage: UIImage?
-    @Binding var isScanning: Bool // Triggers the measurement logic
+    @Binding var isScanning: Bool
     
     func makeUIView(context: Context) -> ARSCNView {
         let sceneView = ARSCNView()
         sceneView.delegate = context.coordinator
         
         let config = ARWorldTrackingConfiguration()
+        // Enable depth if available (LiDAR)
         if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
             config.frameSemantics.insert(.sceneDepth)
         }
@@ -50,10 +51,13 @@ struct AutoMeasureCameraView: UIViewRepresentable {
             guard !isProcessing, let frame = sceneView.session.currentFrame else { return }
             isProcessing = true
             
+            // FIX: Capture snapshot on MAIN thread before dispatching
+            let snapshot = sceneView.snapshot()
+            
             let pixelBuffer = frame.capturedImage
             let orientation = CGImagePropertyOrientation(rawValue: UInt32(UIDevice.current.orientation.rawValue)) ?? .up
             
-            // Use Saliency to find "interesting" objects (the clothes)
+            // Vision Request (Find interesting objects)
             let request = VNGenerateAttentionBasedSaliencyImageRequest()
             let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
             
@@ -61,7 +65,6 @@ struct AutoMeasureCameraView: UIViewRepresentable {
                 do {
                     try handler.perform([request])
                     
-                    // FIX IS HERE: Access 'salientObjects' inside the observation
                     guard let observation = request.results?.first as? VNSaliencyImageObservation,
                           let salientObject = observation.salientObjects?.first else {
                         print("Vision: No salient object found.")
@@ -69,8 +72,15 @@ struct AutoMeasureCameraView: UIViewRepresentable {
                         return
                     }
                     
-                    // Use the bounding box of the first salient object found
-                    self.calculateRealWorldSize(frame: frame, sceneView: sceneView, boundingBox: salientObject.boundingBox)
+                    // Switch back to Main Thread for Raycasting (SceneKit safety)
+                    DispatchQueue.main.async {
+                        self.calculateRealWorldSize(
+                            frame: frame,
+                            sceneView: sceneView,
+                            boundingBox: salientObject.boundingBox,
+                            snapshot: snapshot
+                        )
+                    }
                     
                 } catch {
                     print("Vision Error: \(error)")
@@ -79,9 +89,10 @@ struct AutoMeasureCameraView: UIViewRepresentable {
             }
         }
         
-        func calculateRealWorldSize(frame: ARFrame, sceneView: ARSCNView, boundingBox: CGRect) {
+        func calculateRealWorldSize(frame: ARFrame, sceneView: ARSCNView, boundingBox: CGRect, snapshot: UIImage) {
             let screenCenter = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
             
+            // Perform Raycast to find distance to surface
             guard let query = sceneView.raycastQuery(from: screenCenter, allowing: .estimatedPlane, alignment: .any),
                   let result = sceneView.session.raycast(query).first else {
                 print("Surface not detected yet. Move iPhone slightly.")
@@ -94,7 +105,7 @@ struct AutoMeasureCameraView: UIViewRepresentable {
             let hitPosition = result.worldTransform.columns.3
             let distance = simd_distance(cameraPosition, hitPosition)
             
-            // Convert Pixels to Real World Size
+            // Convert Pixels to Real World Size using Camera Intrinsics
             let intrinsics = frame.camera.intrinsics
             let focalLengthX = intrinsics[0, 0]
             let focalLengthY = intrinsics[1, 1]
@@ -111,18 +122,13 @@ struct AutoMeasureCameraView: UIViewRepresentable {
             let widthInches = Double(realWidthMeters * 39.37)
             let heightInches = Double(realHeightMeters * 39.37)
             
-            let snapshot = sceneView.snapshot()
-            
-            DispatchQueue.main.async {
-                self.parent.measuredWidth = widthInches
-                self.parent.measuredLength = heightInches
-                self.parent.capturedImage = snapshot
-                self.parent.isScanning = false
-                self.isProcessing = false
-            }
+            // Update UI
+            self.parent.measuredWidth = widthInches
+            self.parent.measuredLength = heightInches
+            self.parent.capturedImage = snapshot
+            self.parent.isScanning = false
+            self.isProcessing = false
         }
-        
-        
         
         func resetState() {
             DispatchQueue.main.async {
