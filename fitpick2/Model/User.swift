@@ -12,5 +12,6 @@ struct User: Identifiable, Codable {
     var id: String
     var username: String
     var selfie: String
+    var bio: String?
     var following: [String] = []
 }

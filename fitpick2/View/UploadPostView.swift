@@ -108,7 +108,7 @@ struct UploadPostView: View {
                         Button(action: { showWardrobePicker = true }) {
                             HStack {
                                 Image(systemName: "tag.fill")
-                                Text(selectedWardrobeItems.isEmpty ? "Tag items from your closet" : "\(selectedWardrobeItems.count) Items Tagged")
+                                Text(selectedWardrobeItems.isEmpty ? "Manually tag items from your closet" : "\(selectedWardrobeItems.count) Items Tagged")
                                     .fontWeight(.medium)
                             }
                             .padding(.vertical, 8)
