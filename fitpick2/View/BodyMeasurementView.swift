@@ -3,6 +3,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import GoogleSignIn
+
 struct BodyMeasurementView: View {
     
     @StateObject private var viewModel = BodyMeasurementViewModel()
@@ -41,7 +42,21 @@ struct BodyMeasurementView: View {
                                 .padding(12)
                                 .background(Color(.secondarySystemBackground))
                                 .cornerRadius(10)
+                                // --- UNIQUE VALIDATION UI ---
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(viewModel.usernameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                                )
                                 .disabled(!isEditing)
+                                .autocapitalization(.none)
+                            
+                            // --- ERROR MESSAGE ---
+                            if let error = viewModel.usernameError {
+                                Text(error)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.red)
+                                    .padding(.leading, 4)
+                            }
                         }
                         .padding(.horizontal)
                         .padding(.top, 10)
@@ -111,19 +126,32 @@ struct BodyMeasurementView: View {
                         // --- 7. SAVE BUTTON ---
                         if isEditing {
                             Button(action: {
-                                saveProfile()
-                                // Logic: saveProfile handles Firebase, then we show success
-                                showSaveSuccessAlert = true
+                                Task {
+                                    // Run uniqueness check before saving
+                                    if await viewModel.isUsernameUnique() {
+                                        saveProfile()
+                                        showSaveSuccessAlert = true
+                                    }
+                                }
                             }) {
-                                Text("Save Changes")
-                                    .font(.headline).foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 16)
-                                    .background(viewModel.username.isEmpty ? Color.gray : Color.black)
-                                    .cornerRadius(12)
+                                Group {
+                                    if viewModel.isCheckingUsername {
+                                        ProgressView().tint(.white)
+                                    } else {
+                                        Text("Save Changes")
+                                            .font(.headline).foregroundColor(.white)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                // Turn gray if empty
+                                .background(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray : Color.black)
+                                .cornerRadius(12)
                             }
                             .padding(.horizontal)
                             .padding(.bottom, 15)
+                            // Prevent click if empty or loading
+                            .disabled(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isCheckingUsername)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         } else {
                             Spacer().frame(height: 15)
@@ -131,9 +159,7 @@ struct BodyMeasurementView: View {
                     }
                 }
             }
-            // --- UPDATED TOOLBAR ---
             .toolbar {
-                // Move to Trailing (Upper Right)
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if isEditing {
                         Button("Cancel") {
@@ -147,7 +173,7 @@ struct BodyMeasurementView: View {
                             withAnimation(.spring()) { isEditing = true }
                         }) {
                             HStack(spacing: 6) {
-                                Image(systemName: "pencil.circle.fill") // Using a filled icon for better visibility
+                                Image(systemName: "pencil.circle.fill")
                                     .foregroundColor(fitPickGold)
                                 Text("Edit Profile")
                                     .foregroundColor(.primary)
@@ -155,21 +181,20 @@ struct BodyMeasurementView: View {
                             .font(.subheadline).bold()
                             .padding(.vertical, 4)
                             .padding(.horizontal, 8)
-                            .background(fitPickGold.opacity(0.1)) // Subtle background makes it look like a button
+                            .background(fitPickGold.opacity(0.1))
                             .cornerRadius(8)
                         }
                         .id("edit")
                     }
                 }
             }
-            // --- ALERTS ---
             .alert("Discard Changes?", isPresented: $showCancelAlert) {
                 Button("Keep Editing", role: .cancel) { }
                 Button("Discard", role: .destructive) {
                     withAnimation {
                         isEditing = false
                         focusedPart = nil
-                        viewModel.fetchUserData() // Revert changes by fetching original data
+                        viewModel.fetchUserData()
                     }
                 }
             } message: {
@@ -182,7 +207,6 @@ struct BodyMeasurementView: View {
             } message: {
                 Text("Your measurements and profile details have been saved successfully.")
             }
-            // --- FULL SCREEN COVERS & SHEETS ---
             .fullScreenCover(isPresented: $showAutoMeasure) {
                 AutoMeasureView { h, w, i, a, s, c, hi in
                     viewModel.height = h; viewModel.waist = w; viewModel.inseam = i
@@ -196,37 +220,32 @@ struct BodyMeasurementView: View {
         }
         .onAppear { viewModel.fetchUserData() }
     }
-    // (Avatar Section & saveProfile logic remain unchanged)
+    
     @ViewBuilder
-        private func bodyAvatarSection(geo: GeometryProxy, screenHeight: CGFloat) -> some View {
-            ZStack {
-                // --- CLEAN ANCHOR EFFECT ---
-                // Instead of a gray box, we use a very soft circular gradient
-                // to provide a visual base for the avatar.
-                Circle()
-                    .fill(RadialGradient(
-                        gradient: Gradient(colors: [fitPickGold.opacity(0.12), .clear]),
-                        center: .center,
-                        startRadius: 20,
-                        endRadius: 180
-                    ))
-                    .frame(width: geo.size.width)
-                    .offset(y: -10)
-                
-                // --- THE AVATAR ---
-                // Removed the RoundedRectangle. Added a subtle shadow.
-                Image(viewModel.gender ?? "Male")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: screenHeight * 0.35)
-                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
-                    .overlay(
-                        Group {
-                            if let part = focusedPart {
-                                MeasurementGuide(focusedPart: part, geo: geo)
-                            }
+    private func bodyAvatarSection(geo: GeometryProxy, screenHeight: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(RadialGradient(
+                    gradient: Gradient(colors: [fitPickGold.opacity(0.12), .clear]),
+                    center: .center,
+                    startRadius: 20,
+                    endRadius: 180
+                ))
+                .frame(width: geo.size.width)
+                .offset(y: -10)
+            
+            Image(viewModel.gender ?? "Male")
+                .resizable()
+                .scaledToFit()
+                .frame(height: screenHeight * 0.35)
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+                .overlay(
+                    Group {
+                        if let part = focusedPart {
+                            MeasurementGuide(focusedPart: part, geo: geo)
                         }
-                    )
+                    }
+                )
             
             HStack {
                 VStack(alignment: .leading, spacing: screenHeight * 0.04) {
@@ -264,14 +283,12 @@ struct BodyMeasurementView: View {
         guard let userEmail = session.email, !userEmail.isEmpty else { return }
         let db = Firestore.firestore()
         
-        // Handle image upload if exists
         if let selfie = selectedSelfie {
             storageManager.uploadSelfie(email: userEmail, selfie: selfie) { url in
                 db.collection("users").document(userEmail).updateData(["selfie": url])
             }
         }
         
-        // Save the rest of the data
         db.collection("users").document(userEmail).updateData([
             "gender": viewModel.gender ?? "Male",
             "username": viewModel.username,
@@ -287,14 +304,15 @@ struct BodyMeasurementView: View {
         ])
     }
 }
-// MARK: - Subcomponents (Internalized Logic)
+
+// MARK: - Subcomponents
 struct MeasurementCallout: View {
     let label: String
     @Binding var value: Double
     let unit: String
     let alignment: HorizontalAlignment
     let isFocused: Bool
-    let isLocked: Bool // To disable the Menu
+    let isLocked: Bool
     let toggleFocus: () -> Void
     var body: some View {
         HStack(spacing: 4) {
@@ -306,7 +324,6 @@ struct MeasurementCallout: View {
                 Text(label.uppercased()).font(.system(size: 8, weight: .black))
                     .foregroundColor(isFocused ? Color("fitPickGold") : .secondary)
                 
-                // Clicking the value only opens the picker if NOT locked
                 Menu {
                     Picker(label, selection: $value) {
                         ForEach(1...250, id: \.self) { num in
@@ -317,7 +334,7 @@ struct MeasurementCallout: View {
                     Text("\(Int(value))\(unit)").font(.system(size: 13, weight: .bold, design: .monospaced))
                         .foregroundColor(isFocused ? Color("fitPickGold") : .primary)
                 }
-                .disabled(isLocked) // Disable picker interaction
+                .disabled(isLocked)
             }
             .padding(5)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemBackground))
@@ -336,13 +353,14 @@ struct MeasurementCallout: View {
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(Color(.secondarySystemBackground)))
         }
-        .disabled(isLocked) // Prevent clicking eye icons unless in Edit mode
+        .disabled(isLocked)
     }
     private var guideLine: some View {
         Rectangle().fill(isFocused ? Color("fitPickGold") : Color.gray.opacity(0.2))
             .frame(width: 10, height: 1)
     }
 }
+
 struct StatBox: View {
     let label: String
     @Binding var value: Double
@@ -369,48 +387,36 @@ struct StatBox: View {
         }
     }
 }
+
 struct MeasurementGuide: View {
     let focusedPart: String
     let geo: GeometryProxy
     
     var body: some View {
-        // Use the middle of the available width
         let centerX = geo.size.width / 2
-        
-        // We match the height used in the frame of the image
         let avatarHeight = geo.size.height
-        
-        // No vertical offset needed if the ZStack is perfectly contained,
-        // but we'll anchor everything to the top of the avatar's head.
         
         ZStack {
             switch focusedPart {
             case "Height":
-                // Top of head to bottom of feet
                 makeLine(from: CGPoint(x: centerX - 88, y: avatarHeight * 0.33),
                          to: CGPoint(x: centerX - 88, y: avatarHeight * 0.025))
             case "Shoulder":
-                // Wider horizontal line across the upper torso
                 makeLine(from: CGPoint(x: centerX - 116, y: avatarHeight * 0.08),
                          to: CGPoint(x: centerX - 57, y: avatarHeight * 0.08))
             case "Chest":
-                // Slightly higher than center torso
                 makeLine(from: CGPoint(x: centerX - 105, y: avatarHeight * 0.1),
                          to: CGPoint(x: centerX - 70, y: avatarHeight * 0.1))
             case "Waist":
-                // Narrowest part of the torso
                 makeLine(from: CGPoint(x: centerX - 106, y: avatarHeight * 0.135),
                          to: CGPoint(x: centerX - 67, y: avatarHeight * 0.135))
             case "Hips":
-                // Wider line below the waist
                 makeLine(from: CGPoint(x: centerX - 108, y: avatarHeight * 0.17),
                          to: CGPoint(x: centerX - 67, y: avatarHeight * 0.17))
             case "Arm":
-                // Diagonal line following the arm angle
                 makeLine(from: CGPoint(x: centerX - 110, y: avatarHeight * 0.08),
                          to: CGPoint(x: centerX - 120, y: avatarHeight * 0.175))
             case "Inseam":
-                // Vertical line from crotch to ankle
                 makeLine(from: CGPoint(x: centerX - 95, y: avatarHeight * 0.2),
                          to: CGPoint(x: centerX - 95, y: avatarHeight * 0.31))
             default: EmptyView()
@@ -421,16 +427,14 @@ struct MeasurementGuide: View {
     private func makeLine(from: CGPoint, to: CGPoint) -> some View {
         DashedLineShape(from: from, to: to)
             .stroke(Color("fitPickGold"), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [6, 4]))
-            .shadow(color: .black.opacity(0.1), radius: 1) // Makes the line "pop" against the avatar
+            .shadow(color: .black.opacity(0.1), radius: 1)
     }
 }
+
 struct DashedLineShape: Shape {
     var from: CGPoint
     var to: CGPoint
     func path(in rect: CGRect) -> Path {
         var path = Path(); path.move(to: from); path.addLine(to: to); return path
     }
-}
-#Preview {
-    BodyMeasurementView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }

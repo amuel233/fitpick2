@@ -3,9 +3,14 @@ import FirebaseStorage
 import FirebaseFirestore
 import FirebaseAILogic
 import FirebaseAuth
+
 class BodyMeasurementViewModel: ObservableObject {
     @Published var isGenerating: Bool = false
     @Published var generatedImage: UIImage? = nil
+    
+    // --- NEW VALIDATION STATES ---
+    @Published var usernameError: String? = nil
+    @Published var isCheckingUsername: Bool = false
     
     // Measurement Properties (Source of Truth)
     @Published var username: String = ""
@@ -20,33 +25,60 @@ class BodyMeasurementViewModel: ObservableObject {
     @Published var inseam: Double = 0
     @Published var shoeSize: Double = 0
     
-    @Published var bodyBase: String = "" // Add this property
+    @Published var bodyBase: String = ""
     
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
     
     @Published private var lastGeneratedState: [String: Any] = [:]
     
-    
-    /// Compares current UI values against the last successfully generated avatar specs
-        var hasChanges: Bool {
-            let current: [String: Any] = [
-                "gender": gender as Any,
-                "height": height,
-                "bodyWeight": bodyWeight,
-                "chest": chest,
-                "shoulderWidth": shoulderWidth,
-                "armLength": armLength,
-                "waist": waist,
-                "hips": hips,
-                "inseam": inseam,
-                "shoeSize": shoeSize
-            ]
-            return NSDictionary(dictionary: current).isEqual(to: lastGeneratedState) == false
+    // --- NEW UNIQUE CHECK LOGIC ---
+    func isUsernameUnique() async -> Bool {
+        guard !username.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard let currentUserEmail = Auth.auth().currentUser?.email else { return false }
+        
+        await MainActor.run {
+            isCheckingUsername = true
+            usernameError = nil
         }
+        
+        do {
+            // Check if any user already has this username
+            let query = db.collection("users").whereField("username", isEqualTo: username)
+            let snapshot = try await query.getDocuments()
+            
+            // If documents exist, check if they belong to someone else
+            let isTaken = snapshot.documents.contains { $0.documentID != currentUserEmail }
+            
+            await MainActor.run {
+                isCheckingUsername = false
+                if isTaken {
+                    self.usernameError = "This username is unavailable. Please try another."
+                }
+            }
+            return !isTaken
+        } catch {
+            await MainActor.run { isCheckingUsername = false }
+            return false
+        }
+    }
     
+    var hasChanges: Bool {
+        let current: [String: Any] = [
+            "gender": gender as Any,
+            "height": height,
+            "bodyWeight": bodyWeight,
+            "chest": chest,
+            "shoulderWidth": shoulderWidth,
+            "armLength": armLength,
+            "waist": waist,
+            "hips": hips,
+            "inseam": inseam,
+            "shoeSize": shoeSize
+        ]
+        return NSDictionary(dictionary: current).isEqual(to: lastGeneratedState) == false
+    }
     
-    /// Fetches existing user data from Firestore to populate the UI
     func fetchUserData() {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         
@@ -54,12 +86,10 @@ class BodyMeasurementViewModel: ObservableObject {
             guard let self = self, let data = document?.data(), document?.exists == true else { return }
             
             DispatchQueue.main.async {
-                // 1. Get the username
-                            self.username = data["username"] as? String ?? ""
-                            
+                self.usernameError = nil // Reset error on fetch
+                self.username = data["username"] as? String ?? ""
                 self.gender = data["gender"] as? String
                 
-                // Fetching from the "measurements" nested map
                 if let measurements = data["measurements"] as? [String: Any] {
                     self.height = measurements["height"] as? Double ?? 0
                     self.bodyWeight = measurements["bodyWeight"] as? Double ?? 0
@@ -70,19 +100,12 @@ class BodyMeasurementViewModel: ObservableObject {
                     self.hips = measurements["hips"] as? Double ?? 0
                     self.inseam = measurements["inseam"] as? Double ?? 0
                     self.shoeSize = measurements["shoeSize"] as? Double ?? 0
-                    
-                    
                 }
+                self.bodyBase = data["bodybase"] as? String ?? "average"
             }
-            
-            if let data = document?.data() {
-                    self.bodyBase = data["bodybase"] as? String ?? "average"
-                }
         }
-        
-        
-        
     }
+
     
     func generateAndSaveAvatar() async {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
