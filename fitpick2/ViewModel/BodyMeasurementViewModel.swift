@@ -174,11 +174,11 @@ class BodyMeasurementViewModel: ObservableObject {
                 - HEAD-TO-TOE ALIGNMENT: Top of head (crown) must be positioned at the top of the image frame; feet must be positioned at the bottom of the image frame.
                 - NO ROTATION: 0-degree rotation is mandatory. Do not tilt, rotate, or use landscape/horizontal orientation. 
                 - STANDING: Neutral A-pose (arms slightly away from sides, legs straight).
-                - ATTIRE: \(attire) in matte charcoal. Ensure fabric is ultra-tight to show the \(genderTerm) silhouette.
+                - ATTIRE: \(attire) in clean white. Ensure fabric is ultra-tight to show the \(genderTerm) silhouette.
 
                 [IMAGE QUALITY]:
                 - CAMERA: Eye-level, perfectly centered, long-shot. No "Dutch angle" or tilt.
-                - BACKGROUND: Solid, high-contrast white studio. 
+                - BACKGROUND: Solid, high-contrast gray studio. 
                 - FULL FRAME: Render the entire body within the vertical bounds. DO NOT CROP THE HEAD AND THE FEET.
                 """
             

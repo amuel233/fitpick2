@@ -1,10 +1,3 @@
-//
-//  LuxeAlert.swift
-//  fitpick2
-//
-//  Created by Karry Raia Oberes on 2/17/26.
-//
-
 import SwiftUI
 
 // MARK: - Reusable Luxe Alert Component
@@ -43,17 +36,21 @@ struct LuxeAlert: View {
                 
                 // Action Buttons
                 HStack(spacing: 0) {
-                    Button(action: { withAnimation { onCancel() } }) {
-                        Text(cancelTitle)
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.gray)
-                            .frame(maxWidth: .infinity, minHeight: 50)
+                    // NEW: Only show Cancel if a title is provided
+                    if !cancelTitle.isEmpty {
+                        Button(action: { withAnimation { onCancel() } }) {
+                            Text(cancelTitle)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.gray)
+                                .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                        
+                        Divider()
+                            .frame(height: 50)
+                            .background(Color.luxeEcru.opacity(0.2))
                     }
                     
-                    Divider()
-                        .frame(height: 50)
-                        .background(Color.luxeEcru.opacity(0.2))
-                    
+                    // Confirm button (Centers itself if Cancel is hidden)
                     Button(action: { onConfirm() }) {
                         Text(confirmTitle)
                             .font(.system(size: 11, weight: .black))
@@ -70,7 +67,7 @@ struct LuxeAlert: View {
     }
 }
 
-// MARK: - View Extension for easy calling
+// MARK: - View Extension
 extension View {
     func luxeAlert(
         isPresented: Binding<Bool>,
@@ -91,7 +88,7 @@ extension View {
                     onConfirm: onConfirm,
                     onCancel: { isPresented.wrappedValue = false }
                 )
-                .zIndex(1) // Ensure it stays on top
+                .zIndex(1)
             }
         }
     }
