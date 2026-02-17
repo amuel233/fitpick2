@@ -215,9 +215,9 @@ struct WardrobeSelectorView: View {
                     let data = doc.data()
                     return WardrobeItem(
                         id: doc.documentID,
-                        imageURL: data["imageURL"] as? String ?? "",
+                        imageURL: data["imageURL"] as? String ?? data["remoteURL"] as? String ?? "",
                         category: data["category"] as? String ?? "Other",
-                        subcategory: data["subcategory"] as? String ?? "General"
+                        subcategory: data["subcategory"] as? String ?? data["subCategory"] as? String ?? "General"
                     )
                 } ?? []
                 
