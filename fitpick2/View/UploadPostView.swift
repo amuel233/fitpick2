@@ -2,13 +2,13 @@
 //  UploadPostView.swift
 //  fitpick2
 //
-//  Created by Karry Raia Oberes on 1/27/26.
-//
 
 import SwiftUI
 import PhotosUI
 import FirebaseFirestore
 import FirebaseAuth
+import FirebaseStorage
+import Kingfisher
 
 struct UploadPostView: View {
     @State private var selectedItem: PhotosPickerItem? = nil
@@ -16,317 +16,236 @@ struct UploadPostView: View {
     @State private var caption: String = ""
     @State private var isUploading = false
     
-    // Adjustment States
+    // Adjustment States (Logic preserved)
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     
-    // Preview States
-    @State private var showPreview = false
-    @State private var finalRenderedImage: UIImage? = nil
-    
-    // Wardrobe Tagging States [New]
+    @State private var showCancelWarning = false
     @State private var selectedWardrobeItems: Set<String> = []
     @State private var showWardrobePicker = false
     
-    @EnvironmentObject var session: UserSession
+    // Using the fixed Manager logic
+    @ObservedObject var firestoreManager = FirestoreManager.shared
     @Environment(\.dismiss) var dismiss
     
-    // Updated Theme Colors
-    let fitPickGold = Color("fitPickGold")
-    let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
-    let fitPickText = Color(red: 26/255, green: 26/255, blue: 27/255)
-
-    // MARK: - Rendered View
-    var adjustedImageView: some View {
-        ZStack {
-            if let image = postImage {
-                GeometryReader { geo in
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .scaleEffect(scale)
-                        .offset(offset)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
-            }
-        }
-        .frame(width: 400, height: 400)
-        .background(Color.white)
-        .clipped()
-    }
+    let fitPickGold = Color(red: 0.75, green: 0.60, blue: 0.22)
+    let editorBlack = Color(red: 10/255, green: 10/255, blue: 10/255)
+    let surfaceDark = Color(white: 0.08)
 
     var body: some View {
         NavigationStack {
             ZStack {
-                fitPickWhite.ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
+                editorBlack.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Image Section
-                    Group {
-                        if let _ = postImage {
-                            adjustedImageView
-                                .overlay(RoundedRectangle(cornerRadius: 15).stroke(fitPickGold, lineWidth: 1))
-                                .cornerRadius(15)
-                                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
-                                .gesture(
-                                    DragGesture()
-                                        .onChanged { value in
-                                            offset = CGSize(
-                                                width: lastOffset.width + value.translation.width,
-                                                height: lastOffset.height + value.translation.height
-                                            )
+                    // MARK: - STUDIO HEADER (Fixed Height)
+                    headerView
+                        .frame(height: 60)
+                        .padding(.horizontal, 20)
+
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 25) {
+                            
+                            // MARK: - FIXED IMAGE CANVAS
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(surfaceDark)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                                    )
+                                
+                                if let image = postImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: UIScreen.main.bounds.width - 40, height: 480) // Fixed dimensions
+                                        .scaleEffect(scale)
+                                        .offset(offset)
+                                        .gesture(zoomGesture)
+                                        .gesture(dragGesture)
+                                } else {
+                                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                                        VStack(spacing: 15) {
+                                            Image(systemName: "plus.viewfinder")
+                                                .font(.system(size: 32, weight: .thin))
+                                            Text("IMPORT PHOTO")
+                                                .font(.system(size: 10, weight: .black)).tracking(3)
                                         }
-                                        .onEnded { _ in lastOffset = offset }
-                                )
-                                .gesture(
-                                    MagnificationGesture()
-                                        .onChanged { value in
-                                            scale = lastScale * value
-                                        }
-                                        .onEnded { _ in lastScale = scale }
-                                )
-                                .overlay(controlsOverlay)
-                        } else {
-                            PhotosPicker(selection: $selectedItem, matching: .images) {
-                                emptyStatePlaceholder
+                                        .foregroundColor(fitPickGold.opacity(0.5))
+                                    }
+                                }
                             }
+                            .frame(height: 480) // Constrains the canvas
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .padding(.horizontal, 20)
+                            
+                            // MARK: - INPUT FIELDS
+                            VStack(alignment: .leading, spacing: 30) {
+                                // Narrative field
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("NARRATIVE")
+                                        .font(.system(size: 10, weight: .black)).tracking(2)
+                                        .foregroundColor(fitPickGold)
+                                    
+                                    TextField("", text: $caption, prompt: Text("Describe the vibe...").foregroundColor(.white.opacity(0.2)))
+                                        .font(.system(size: 15, design: .serif)).italic()
+                                        .foregroundColor(.white)
+                                        .tint(fitPickGold)
+                                }
+                                .padding(.bottom, 10)
+                                .overlay(Rectangle().frame(height: 0.5).foregroundColor(.white.opacity(0.1)), alignment: .bottom)
+                                
+                                // Wardrobe Button
+                                Button(action: { showWardrobePicker = true }) {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("LINKED WARDROBE")
+                                                .font(.system(size: 10, weight: .black)).tracking(2)
+                                                .foregroundColor(fitPickGold)
+                                            
+                                            Text(selectedWardrobeItems.isEmpty ? "No items selected" : "\(selectedWardrobeItems.count) ITEMS TAGGED")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.white.opacity(0.4))
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(fitPickGold)
+                                    }
+                                    .padding(20)
+                                    .background(surfaceDark)
+                                    .cornerRadius(12)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            
+                            // Bottom spacing for scroll comfort
+                            Spacer(minLength: 50)
                         }
                     }
-                    .frame(width: 400, height: 400)
-                    .padding(.top, 10)
-                    .onChange(of: selectedItem) { _, newValue in
-                        handleImageSelection(newValue)
-                    }
+                }
+            }
+        }
+        .luxeAlert(
+            isPresented: $showCancelWarning,
+            title: "DISCARD EDIT?",
+            message: "Your creation and story will be lost. Are you sure?",
+            confirmTitle: "DISCARD",
+            cancelTitle: "STAY",
+            onConfirm: { dismiss() }
+        )
+        .task(id: selectedItem) {
+            if let data = try? await selectedItem?.loadTransferable(type: Data.self),
+               let uiImage = UIImage(data: data) {
+                postImage = uiImage
+            }
+        }
+        .sheet(isPresented: $showWardrobePicker) {
+            WardrobeSelectorView(selectedItems: $selectedWardrobeItems)
+                .presentationDetents([.medium, .large])
+                .presentationBackground(editorBlack)
+        }
+    }
 
-                    // Wardrobe Tagging Button [New]
-                    if postImage != nil {
-                        Button(action: { showWardrobePicker = true }) {
-                            HStack {
-                                Image(systemName: "tag.fill")
-                                Text(selectedWardrobeItems.isEmpty ? "Manually tag items from your closet" : "\(selectedWardrobeItems.count) Items Tagged")
-                                    .fontWeight(.medium)
-                            }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
-                            .background(fitPickGold.opacity(0.1))
-                            .foregroundColor(fitPickGold)
-                            .cornerRadius(20)
-                        }
-                        .padding(.top, 15)
-                    }
-
-                    // Caption Field
-                    TextField(
-                        "",
-                        text: $caption,
-                        prompt: Text("Say something about your fit...").foregroundColor(.gray),
-                        axis: .vertical
-                    )
-                    .lineLimit(3, reservesSpace: true)
-                    .padding()
-                    .background(Color.white)
-                    .cornerRadius(12)
-                    .foregroundColor(fitPickText)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.gray.opacity(0.15), lineWidth: 1)
-                    )
-                    .padding(.horizontal)
-                    .padding(.top, 15)
-
-                    // Preview & Share Button
+    // MARK: - SUBVIEWS
+    private var headerView: some View {
+        HStack {
+            Button(action: { showCancelWarning = true }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white.opacity(0.5))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Color.white.opacity(0.05)))
+            }
+            
+            Spacer()
+            
+            Text("POST")
+                .font(.system(size: 13, weight: .black))
+                .tracking(6)
+                .foregroundColor(fitPickGold)
+            
+            Spacer()
+            
+            if postImage != nil {
+                Button(action: { sharePost() }) {
                     if isUploading {
                         ProgressView().tint(fitPickGold)
-                            .padding(.top, 20)
                     } else {
-                        Button(action: generatePreview) {
-                            Text("Preview & Share")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(postImage == nil || caption.isEmpty ? Color.gray.opacity(0.3) : fitPickGold)
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 20)
-                        .disabled(postImage == nil || caption.isEmpty)
-                    }
-                    
-                    Spacer()
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("New Post")
-                        .fontWeight(.bold)
-                        .foregroundColor(fitPickText)
-                }
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }.foregroundColor(fitPickGold)
-                }
-            }
-            .sheet(isPresented: $showPreview) {
-                previewSheetContent
-            }
-            // Closet Picker Sheet [New]
-            .sheet(isPresented: $showWardrobePicker) {
-                WardrobeSelectorView(selectedItems: $selectedWardrobeItems)
-            }
-        }
-    }
-}
-
-// MARK: - Extensions
-extension UploadPostView {
-    
-    func hideKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-    
-    private var controlsOverlay: some View {
-        VStack {
-            HStack {
-                Button(action: {
-                    postImage = nil
-                    selectedItem = nil
-                    selectedWardrobeItems.removeAll() // Clear tags if image is removed
-                }) {
-                    Image(systemName: "xmark.circle.fill").background(Circle().fill(Color.white))
-                }
-                Spacer()
-                Button(action: resetPosition) {
-                    Image(systemName: "arrow.counterclockwise.circle.fill").background(Circle().fill(Color.white))
-                }
-            }
-            .padding(12).foregroundColor(fitPickGold).font(.title2)
-            Spacer()
-        }
-    }
-    
-    private var emptyStatePlaceholder: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .fill(Color.white)
-            .frame(height: 400)
-            .overlay(
-                RoundedRectangle(cornerRadius: 15)
-                    .stroke(fitPickGold.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
-            )
-            .overlay(VStack(spacing: 12) {
-                Image(systemName: "plus.viewfinder").font(.system(size: 40))
-                Text("Upload your photo").font(.headline)
-            }.foregroundColor(fitPickGold))
-    }
-    
-    private var previewSheetContent: some View {
-        ZStack {
-            fitPickWhite.ignoresSafeArea()
-            VStack(spacing: 20) {
-                Text("Post Preview")
-                    .font(.headline)
-                    .foregroundColor(fitPickText)
-                    .padding(.top)
-                
-                if let rendered = finalRenderedImage {
-                    Image(uiImage: rendered)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 300, height: 300)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
-                }
-                
-                ScrollView {
-                    VStack(alignment: .center, spacing: 8) {
-                        Text(caption)
-                            .font(.subheadline)
-                            .foregroundColor(fitPickText.opacity(0.8))
-                        
-                        if !selectedWardrobeItems.isEmpty {
-                            Text("\(selectedWardrobeItems.count) items tagged from closet")
-                                .font(.caption)
-                                .foregroundColor(fitPickGold)
-                                .italic()
-                        }
+                        Text("POST")
+                            .font(.system(size: 11, weight: .black))
+                            .tracking(2)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(fitPickGold)
+                            .foregroundColor(.black)
+                            .clipShape(Capsule())
                     }
                 }
-                .frame(maxHeight: 100)
-                
-                Button(action: uploadPost) {
-                    Text("Confirm & Post")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(fitPickGold)
-                        .cornerRadius(12)
-                }
-                .padding(.horizontal)
-                
-                Button("Go Back") { showPreview = false }.foregroundColor(fitPickGold)
-                Spacer()
+            } else {
+                Color.clear.frame(width: 36, height: 36)
             }
-            .padding()
         }
-        .presentationDetents([.medium])
     }
 
-    func resetPosition() {
-        scale = 1.0; lastScale = 1.0; offset = .zero; lastOffset = .zero
+    // MARK: - UNAFFECTED LOGIC
+    var zoomGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { val in scale = lastScale * val }
+            .onEnded { _ in lastScale = scale }
     }
     
-    func handleImageSelection(_ item: PhotosPickerItem?) {
-        Task {
-            if let data = try? await item?.loadTransferable(type: Data.self) {
-                postImage = UIImage(data: data)
-                resetPosition()
-            }
-        }
+    var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { val in offset = CGSize(width: lastOffset.width + val.translation.width, height: lastOffset.height + val.translation.height) }
+            .onEnded { _ in lastOffset = offset }
     }
-
-    func generatePreview() {
-        let renderer = ImageRenderer(content: adjustedImageView)
-        renderer.scale = 3.0
-        if let image = renderer.uiImage {
-            self.finalRenderedImage = image
-            self.showPreview = true
-        }
-    }
-
-    func uploadPost() {
-        guard let finalImg = finalRenderedImage, let email = session.email else { return }
-        showPreview = false
+    
+    func sharePost() {
+        guard let postImage = postImage else { return }
         isUploading = true
-        
-        guard let compressedData = finalImg.jpegData(compressionQuality: 0.7),
-              let readyImage = UIImage(data: compressedData) else { return }
+        let targetSize = CGSize(width: 1080, height: 1350)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let renderedImage = renderer.image { ctx in
+            let viewRect = CGRect(origin: .zero, size: targetSize)
+            UIColor.black.setFill()
+            ctx.fill(viewRect)
+            let aspectWidth = targetSize.width / postImage.size.width
+            let aspectHeight = targetSize.height / postImage.size.height
+            let minAspect = max(aspectWidth, aspectHeight)
+            let scaledWidth = postImage.size.width * minAspect * scale
+            let scaledHeight = postImage.size.height * minAspect * scale
+            let drawRect = CGRect(x: (targetSize.width - scaledWidth) / 2 + (offset.width * (targetSize.width / 350)), y: (targetSize.height - scaledHeight) / 2 + (offset.height * (targetSize.height / 450)), width: scaledWidth, height: scaledHeight)
+            postImage.draw(in: drawRect)
+        }
+        uploadPost(image: renderedImage)
+    }
 
-        let storageManager = StorageManager()
-        storageManager.uploadSocial(email: email, ootd: readyImage) { url in
-            let db = Firestore.firestore()
-            let uniqueID = "\(email)_\(Int(Date().timeIntervalSince1970))"
-            let data: [String: Any] = [
-                "id": uniqueID,
-                "userEmail": email,
-                "username": session.username,
-                "caption": caption,
-                "imageUrl": url,
-                "taggedClothesIds": Array(selectedWardrobeItems), // Save URLs of closet items
-                "likes": 0,
-                "likedBy": [],
-                "likedByNames": [],
-                "timestamp": FieldValue.serverTimestamp()
-            ]
-            db.collection("socials").document(uniqueID).setData(data) { _ in
-                isUploading = false
-                dismiss()
+    func uploadPost(image: UIImage) {
+        guard let userEmail = firestoreManager.currentEmail else { isUploading = false; return }
+        let storageRef = Storage.storage().reference().child("posts/\(UUID().uuidString).jpg")
+        guard let imageData = image.jpegData(compressionQuality: 0.75) else { return }
+        storageRef.putData(imageData, metadata: nil) { _, error in
+            if let error = error { isUploading = false; return }
+            storageRef.downloadURL { url, _ in
+                guard let url = url else { return }
+                let db = Firestore.firestore()
+                let postData: [String: Any] = [
+                    "userEmail": userEmail,
+                    "username": firestoreManager.currentUserData?.username ?? "Anonymous",
+                    "imageUrl": url.absoluteString,
+                    "caption": caption,
+                    "timestamp": FieldValue.serverTimestamp(),
+                    "likes": 0,
+                    "taggedItems": Array(selectedWardrobeItems)
+                ]
+                db.collection("posts").addDocument(data: postData) { _ in
+                    isUploading = false
+                    dismiss()
+                }
             }
         }
     }

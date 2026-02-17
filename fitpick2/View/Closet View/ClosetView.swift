@@ -16,6 +16,7 @@ struct ClosetView: View {
     var targetUsername: String?
     
     @StateObject private var viewModel: ClosetViewModel
+    @ObservedObject var firestoreManager = FirestoreManager.shared
     
     // UI State
     @State private var showCamera = false
@@ -216,7 +217,7 @@ struct ClosetFilterView: View {
         }
     }
     func iconForCategory(_ category: ClothingCategory) -> Image {
-        switch category { case .top: return Image(systemName: "tshirt"); case .bottom: return Image("pants"); case .shoes: return Image(systemName: "shoe"); case .accessories: return Image(systemName: "sunglasses.fill") }
+        switch category { case .top: return Image(systemName: "tshirt"); case .bottom: return Image("icon-pants"); case .shoes: return Image(systemName: "shoe"); case .accessories: return Image(systemName: "sunglasses.fill") }
     }
 }
 

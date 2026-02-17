@@ -18,15 +18,28 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     
-    // Updated Theme Colors
-    let fitPickGold = Color("fitPickGold")
-    let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255) // Clean off-white
-    let fitPickText = Color(red: 26/255, green: 26/255, blue: 27/255)   // Dark gray/black for text
-
+    // Track which field is active for the gold border effect
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case email, password
+    }
+    
     var body: some View {
         ZStack {
-            // Background changed to White
-            fitPickWhite.ignoresSafeArea()
+            // Background: Using the defined Luxe Spotlight Gradient
+            Color.luxeSpotlightGradient
+                .ignoresSafeArea()
+            
+            // Ambient Glows: Using Luxe palette colors for soft depth
+            GeometryReader { geo in
+                ZStack {
+                    Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
+                        .blur(radius: 150).opacity(0.08).offset(x: -150, y: -200)
+                    Circle().fill(Color.luxeFlax).frame(width: 300, height: 300)
+                        .blur(radius: 120).opacity(0.05).offset(x: 200, y: 100)
+                }
+            }
             
             VStack(spacing: 25) {
                 // Header section with Logo and Title
@@ -34,83 +47,74 @@ struct LoginView: View {
                     Image("icon-1024")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 120, height: 80)
-                        .cornerRadius(24)
-                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        .frame(width: 90, height: 90)
+                        .cornerRadius(22)
+                        // Added shadow using Luxe Flax for a gold-tinted glow
+                        .shadow(color: Color.luxeFlax.opacity(0.3), radius: 15, x: 0, y: 8)
                     
+                    // Title: Using luxeBeige for the primary brand text
                     Text("FitPick")
-                        .font(.system(size: 40, weight: .black, design: .rounded))
-                        .foregroundColor(fitPickGold) // Text changed to dark
+                        .font(.system(size: 38, weight: .black))
+                        .kerning(4)
+                        .foregroundColor(.luxeBeige)
+                        .modifier(ShimmerEffect())
                     
-                    Text("Your AI Stylist")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary) // Adjusted for light theme
+                    Text("YOUR AI STYLIST")
+                        .font(.system(size: 12, weight: .bold))
+                        .kerning(4)
+                        .foregroundColor(.luxeFlax) // Secondary brand color
                 }
                 .padding(.top, 40)
 
-                // Input Fields with light theme styling
-                VStack(spacing: 15) {
-                    TextField("", text: $email, prompt: Text("Email").foregroundColor(.gray))
-                        .padding()
-                        .background(Color.white) // White background for inputs
-                        .cornerRadius(12)
-                        .foregroundColor(fitPickText) // Dark text input
-                        .autocapitalization(.none)
-                        .keyboardType(.emailAddress)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                        )
-                    
-                    SecureField("", text: $password, prompt: Text("Password").foregroundColor(.gray))
-                        .padding()
-                        .background(Color.white) // White background for inputs
-                        .cornerRadius(12)
-                        .foregroundColor(fitPickText) // Dark text input
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                        )
+                // Input Fields with Gold Focus Borders
+                VStack(spacing: 18) {
+                    customTextField(placeholder: "Email", text: $email, field: .email, isSecure: false)
+                    customTextField(placeholder: "Password", text: $password, field: .password, isSecure: true)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 30)
 
                 // Primary Login Button
-                Button(action: {
-                    auth.login(email: email, password: password)
-                }) {
-                    Text("Log In")
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(fitPickGold)
-                        .foregroundColor(.white) // White text on gold for better contrast
-                        .cornerRadius(12)
-                }
-                .padding(.horizontal)
-
-                Text("OR")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-
-                // Google Sign-In Button with Gold Border
-                Button(action: {
-                    auth.loginWithGoogle()
-                }) {
-                    HStack {
-                        Image(systemName: "globe")
-                        Text("Continue with Google")
+                VStack(spacing: 20) {
+                    Button(action: {
+                        auth.login(email: email, password: password)
+                    }) {
+                        Text("LOG IN")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .kerning(1.5)
+                            .foregroundColor(.luxeBlack) // Dark text on gold button
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(Color.luxeGoldGradient) // Using official Luxe Gold Gradient
+                            .cornerRadius(14)
+                            .shimmer()
+                            .shadow(color: Color.luxeEcru.opacity(0.4), radius: 12, x: 0, y: 6)
                     }
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .foregroundColor(fitPickGold)
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(fitPickGold, lineWidth: 1)
-                    )
+                    .buttonStyle(PlainButtonStyle())
+
+                    Text("OR")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundColor(.luxeBeige.opacity(0.3)) // Subdued beige text
+
+                    // Google Sign-In Button
+                    Button(action: {
+                        auth.loginWithGoogle()
+                    }) {
+                        HStack {
+                            Image(systemName: "globe")
+                            Text("CONTINUE WITH GOOGLE")
+                        }
+                        .font(.system(size: 13, weight: .bold))
+                        .kerning(1)
+                        .foregroundColor(.luxeBeige)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.luxeEcru.opacity(0.5), lineWidth: 1) // Gold border
+                        )
+                    }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 30)
 
                 // Face ID Section
                 if auth.hasLoggedInBefore {
@@ -120,10 +124,12 @@ struct LoginView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "faceid")
                                 .font(.system(size: 40))
-                            Text("Use Face ID")
-                                .font(.footnote)
+                                .shimmer()
+                            Text("FACE ID")
+                                .font(.system(size: 10, weight: .bold))
+                                .kerning(1.5)
                         }
-                        .foregroundColor(fitPickGold)
+                        .foregroundColor(Color.luxeFlax.opacity(0.8)) // Flax gold accent
                     }
                     .padding(.top, 10)
                 }
@@ -141,5 +147,71 @@ struct LoginView: View {
                 auth.loginWithBiometrics()
             }
         }
+    }
+
+    // Helper view for Gold-Bordered inputs
+    @ViewBuilder
+    private func customTextField(placeholder: String, text: Binding<String>, field: Field, isSecure: Bool) -> some View {
+        let isFocused = focusedField == field
+        
+        Group {
+            if isSecure {
+                SecureField("", text: text, prompt: Text(placeholder).foregroundColor(.luxeFlax.opacity(0.4)))
+                    .focused($focusedField, equals: field)
+            } else {
+                TextField("", text: text, prompt: Text(placeholder).foregroundColor(.luxeFlax.opacity(0.4)))
+                    .focused($focusedField, equals: field)
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+            }
+        }
+        .padding()
+        // Using Rich Charcoal for input backgrounds to match the spotlight theme
+        .background(Color.luxeRichCharcoal.opacity(0.6))
+        .cornerRadius(12)
+        .foregroundColor(.luxeBeige)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isFocused ? Color.luxeFlax : Color.luxeEcru.opacity(0.2), lineWidth: isFocused ? 1.5 : 1)
+                .shadow(color: isFocused ? Color.luxeFlax.opacity(0.2) : .clear, radius: 4)
+        )
+        .animation(.easeInOut(duration: 0.2), value: isFocused)
+    }
+}
+
+// MARK: - Supporting Luxury Components
+
+struct ShimmerEffect: ViewModifier {
+    @State private var phase: CGFloat = -1.5
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geometry in
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: Color.luxeBeige.opacity(0.3), location: 0.5), // Shimmer uses beige
+                            .init(color: .clear, location: 1)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .frame(width: geometry.size.width * 0.4)
+                    .offset(x: phase * geometry.size.width)
+                }
+            )
+            .mask(content)
+            .onAppear {
+                withAnimation(Animation.linear(duration: 3).repeatForever(autoreverses: false)) {
+                    phase = 1.5
+                }
+            }
+    }
+}
+
+extension View {
+    func shimmer() -> some View {
+        self.modifier(ShimmerEffect())
     }
 }

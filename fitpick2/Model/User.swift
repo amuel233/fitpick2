@@ -12,6 +12,8 @@ struct User: Identifiable, Codable {
     var id: String
     var username: String
     var selfie: String
-    var bio: String?
+    var userAvatarURL: String?
+    var bio: String
     var following: [String] = []
+    var hasProfile: Bool
 }

@@ -8,6 +8,7 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import Kingfisher
 
 struct WardrobeItem: Identifiable {
     let id: String
@@ -23,11 +24,12 @@ struct WardrobeSelectorView: View {
     @State private var searchText = ""
     @Environment(\.dismiss) var dismiss
     
-    // Theme Colors
-    let fitPickGold = Color("fitPickGold")
-    let fitPickWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
+    // MARK: - Luxe Brand Assets
+    let fitPickGold = Color(red: 0.75, green: 0.60, blue: 0.22)
+    let editorBlack = Color(red: 10/255, green: 10/255, blue: 10/255)
+    let surfaceDark = Color(white: 0.08)
 
-    // Filter Logic updated to search by subcategory
+    // Unaffected Filter Logic
     private var filteredWardrobe: [WardrobeItem] {
         if searchText.isEmpty {
             return wardrobe
@@ -36,7 +38,6 @@ struct WardrobeSelectorView: View {
         }
     }
 
-    // Items remain grouped by the main category for the layout
     private var groupedWardrobe: [String: [WardrobeItem]] {
         Dictionary(grouping: filteredWardrobe, by: { $0.category })
     }
@@ -48,128 +49,155 @@ struct WardrobeSelectorView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                fitPickWhite.ignoresSafeArea()
+                // Background
+                editorBlack.ignoresSafeArea()
                 
-                if isLoading {
-                    ProgressView().tint(fitPickGold)
-                } else if wardrobe.isEmpty {
-                    emptyStateView(title: "Your closet is empty", sub: "Upload clothes to your wardrobe first.")
-                } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 30) {
-                            ForEach(categories, id: \.self) { category in
-                                categoryCarouselSection(category: category)
+                VStack(spacing: 0) {
+                    // MARK: - EDITORIAL HEADER
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("CLOSET")
+                                .font(.system(size: 14, weight: .black))
+                                .tracking(4)
+                                .foregroundColor(fitPickGold)
+                            Text("\(selectedItems.count) PIECES SELECTED")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: { dismiss() }) {
+                            Text("DONE")
+                                .font(.system(size: 11, weight: .black))
+                                .tracking(2)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(fitPickGold)
+                                .foregroundColor(.black)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 25)
+                    .padding(.top, 25)
+                    .padding(.bottom, 20)
+
+                    // MARK: - LUXE SEARCH BAR
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(fitPickGold.opacity(0.6))
+                        
+                        TextField("", text: $searchText, prompt: Text("Search by subcategory...").foregroundColor(.white.opacity(0.2)))
+                            .font(.system(size: 14, design: .serif)).italic()
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 12)
+                    .background(surfaceDark)
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 15)
+
+                    if isLoading {
+                        Spacer()
+                        ProgressView().tint(fitPickGold)
+                        Spacer()
+                    } else if wardrobe.isEmpty {
+                        emptyStateView(title: "EMPTY CLOSET", sub: "Import items into your closet first.")
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 30) {
+                                ForEach(categories, id: \.self) { category in
+                                    VStack(alignment: .leading, spacing: 15) {
+                                        Text(category.uppercased())
+                                            .font(.system(size: 10, weight: .black))
+                                            .tracking(3)
+                                            .foregroundColor(fitPickGold)
+                                            .padding(.horizontal, 25)
+                                        
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 15) {
+                                                ForEach(groupedWardrobe[category] ?? []) { item in
+                                                    wardrobeCard(item: item)
+                                                }
+                                            }
+                                            .padding(.horizontal, 25)
+                                        }
+                                    }
+                                }
                             }
-                        }
-                        .padding(.vertical)
-                    }
-                }
-            }
-            .navigationTitle("Select Items")
-            .navigationBarTitleDisplayMode(.inline)
-            // Updated prompt to reflect subcategory search
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search subcategories (e.g. Vintage, Denim)...")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .fontWeight(.bold)
-                        .foregroundColor(fitPickGold)
-                }
-            }
-            .onAppear(perform: fetchUserClothes)
-        }
-    }
-
-    // MARK: - Carousel Section
-    @ViewBuilder
-    private func categoryCarouselSection(category: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(category.uppercased())
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text("\(groupedWardrobe[category]?.count ?? 0) items")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
-            .padding(.horizontal)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 12) {
-                    if let items = groupedWardrobe[category] {
-                        ForEach(items) { item in
-                            wardrobeItemCard(item: item)
+                            .padding(.top, 10)
+                            .padding(.bottom, 40)
                         }
                     }
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 5)
             }
         }
+        .onAppear { fetchUserClothes() }
     }
-
+    
+    // MARK: - COMPONENT: WARDROBE CARD
     @ViewBuilder
-    private func wardrobeItemCard(item: WardrobeItem) -> some View {
+    private func wardrobeCard(item: WardrobeItem) -> some View {
         let isSelected = selectedItems.contains(item.id)
         
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: item.imageURL)) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    ZStack {
-                        Color.gray.opacity(0.1)
-                        ProgressView().scaleEffect(0.8)
+        Button(action: { toggleSelection(item: item) }) {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .topTrailing) {
+                    KFImage(URL(string: item.imageURL))
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 140, height: 180)
+                        .background(surfaceDark)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(isSelected ? fitPickGold : Color.white.opacity(0.05), lineWidth: isSelected ? 2 : 1)
+                        )
+                    
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(fitPickGold)
+                            .background(Circle().fill(.black))
+                            .padding(8)
                     }
                 }
-                .frame(width: 120, height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: 15))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 15)
-                        .stroke(isSelected ? fitPickGold : Color.black.opacity(0.05), lineWidth: isSelected ? 3 : 1)
-                )
                 
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, fitPickGold)
-                        .font(.system(size: 22))
-                        .offset(x: 6, y: -6)
-                }
+                Text(item.subcategory.uppercased())
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(1)
+                    .foregroundColor(isSelected ? fitPickGold : .white.opacity(0.6))
+                    .lineLimit(1)
             }
-            
-            // Added subcategory label below the image for clarity
-            Text(item.subcategory)
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 4)
         }
-        .onTapGesture {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            if isSelected {
-                selectedItems.remove(item.id)
-            } else {
-                selectedItems.insert(item.id)
-            }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleSelection(item: WardrobeItem) {
+        if selectedItems.contains(item.id) {
+            selectedItems.remove(item.id)
+        } else {
+            selectedItems.insert(item.id)
         }
     }
 
     private func emptyStateView(title: String, sub: String) -> some View {
         VStack(spacing: 15) {
+            Spacer()
             Image(systemName: "tshirt")
-                .font(.system(size: 50))
-                .foregroundColor(fitPickGold.opacity(0.5))
-            Text(title).font(.headline)
-            Text(sub).font(.subheadline).foregroundColor(.secondary)
+                .font(.system(size: 40, weight: .thin))
+                .foregroundColor(fitPickGold.opacity(0.3))
+            Text(title)
+                .font(.system(size: 12, weight: .black)).tracking(2)
+                .foregroundColor(fitPickGold)
+            Text(sub)
+                .font(.system(size: 13, design: .serif)).italic()
+                .foregroundColor(.white.opacity(0.4))
+            Spacer()
         }
     }
 
-    // MARK: - Data Fetching
     private func fetchUserClothes() {
         guard let email = Auth.auth().currentUser?.email else {
             isLoading = false
@@ -189,7 +217,7 @@ struct WardrobeSelectorView: View {
                         id: doc.documentID,
                         imageURL: data["imageURL"] as? String ?? "",
                         category: data["category"] as? String ?? "Other",
-                        subcategory: data["subcategory"] as? String ?? "General" // Fetching subcategory from Firestore
+                        subcategory: data["subcategory"] as? String ?? "General"
                     )
                 } ?? []
                 

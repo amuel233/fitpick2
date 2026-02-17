@@ -145,14 +145,31 @@ class UserSession: ObservableObject {
     private func fetchFirestoreUsername(userId: String) {
         userListener?.remove()
         
-        // Ensure we use lowercase for document IDs to match AuthManager sync
         userListener = db.collection("users").document(userId.lowercased()).addSnapshotListener { [weak self] snapshot, error in
-            if let document = snapshot, document.exists {
+            guard let self = self, let document = snapshot else { return }
+            
+            if document.exists {
                 let data = document.data()
-                self?.username = data?["username"] as? String ?? "User"
+                self.username = data?["username"] as? String ?? "User"
+
+                // Check for the new flag
+                let hasProfile = data?["hasProfile"] as? Bool ?? false
+
+                // Fallback: Check if they already have height data (exists for old users)
+                let measurements = data?["measurements"] as? [String: Any]
+                let hasExistingData = measurements?["height"] != nil
+
+                // ONLY redirect if BOTH are missing
+                if !hasProfile && !hasExistingData {
+                    DispatchQueue.main.async {
+                        self.appState?.selectedTab = 1
+                    }
+                }
             } else {
-                // Fallback for new users before their Firestore doc is created
-                self?.username = userId.components(separatedBy: "@").first ?? "User"
+                // If the document doesn't even exist yet, they definitely need setup
+                DispatchQueue.main.async {
+                    self.appState?.selectedTab = 1
+                }
             }
         }
     }
