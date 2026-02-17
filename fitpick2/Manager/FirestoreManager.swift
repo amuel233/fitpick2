@@ -13,6 +13,7 @@ import SwiftUI
 class FirestoreManager: ObservableObject {
     private lazy var db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    static let shared = FirestoreManager()
     
     @Published var users = [User]()
     @Published var posts: [SocialsPost] = []
@@ -47,8 +48,13 @@ class FirestoreManager: ObservableObject {
                 id: email,
                 username: data["username"] as? String ?? "",
                 selfie: data["selfie"] as? String ?? "",
-                following: data["following"] as? [String] ?? []
+                userAvatarURL: data["avatarURL"] as? String,
+                bio: data["bio"] as? String ?? "",
+                following: data["following"] as? [String] ?? [],
+                hasProfile: data["hasProfile"] as? Bool ?? false
             )
+            
+            self.fetchFollowing()
         }
     }
     
@@ -198,36 +204,67 @@ class FirestoreManager: ObservableObject {
     
     // MARK: - Update Socials Profile Logic
     
-    func updateInlineProfile(newUsername: String, newBio: String?, newSelfie: UIImage?, completion: @escaping (Bool) -> Void) {
+    func updateInlineProfile(newUsername: String, newBio: String?, newSelfie: UIImage?, completion: @escaping (Bool, String?) -> Void) {
         guard let email = currentEmail,
               let oldUsername = currentUserData?.username else {
-            completion(false)
+            completion(false, "Session expired.")
             return
         }
         
-        // Handle Selfie Upload if a new image exists
-        if let selfie = newSelfie {
-            uploadSelfie(image: selfie, email: email) { url in
-                self.finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: url, completion: completion)
+        // 1. Check if the username is already taken by someone else
+        db.collection("users").whereField("username", isEqualTo: newUsername).getDocuments { snapshot, error in
+            if let docs = snapshot?.documents, !docs.isEmpty {
+                let isDuplicate = docs.contains { $0.documentID != email }
+                if isDuplicate {
+                    completion(false, "Username is already taken.")
+                    return
+                }
             }
-        } else {
-            // Just update text data
-            finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: nil, completion: completion)
+            
+            // 2. Handle Image or just Text updates
+            if let selfie = newSelfie {
+                self.uploadSelfie(image: selfie, email: email) { url in
+                    self.finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: url, completion: completion)
+                }
+            } else {
+                self.finalizeInlineUpdate(email: email, oldName: oldUsername, newName: newUsername, bio: newBio, selfieUrl: nil, completion: completion)
+            }
         }
     }
 
-    private func finalizeInlineUpdate(email: String, oldName: String, newName: String, bio: String?, selfieUrl: String?, completion: @escaping (Bool) -> Void) {
-        var updateData: [String: Any] = ["username": newName]
-        if let url = selfieUrl { updateData["selfie"] = url }
-        if let bio = bio { updateData["bio"] = bio }
+    private func finalizeInlineUpdate(email: String, oldName: String, newName: String, bio: String?, selfieUrl: String?, completion: @escaping (Bool, String?) -> Void) {
+        let batch = db.batch()
+        let socialsRef = db.collection("socials")
         
-        db.collection("users").document(email).updateData(updateData) { error in
-            if let error = error {
-                print("Update error: \(error.localizedDescription)")
-                completion(false)
-            } else {
-                self.updateUsernameEverywhere(email: email, oldUsername: oldName, newUsername: newName)
-                completion(true)
+        // Prepare User Doc update
+        var userUpdate: [String: Any] = ["username": newName]
+        if let bio = bio { userUpdate["bio"] = bio }
+        if let url = selfieUrl { userUpdate["selfie"] = url }
+        
+        let userDocRef = db.collection("users").document(email)
+        batch.updateData(userUpdate, forDocument: userDocRef)
+        
+        // 3. Update all posts authored by this user
+        socialsRef.whereField("userEmail", isEqualTo: email).getDocuments { snapshot, _ in
+            snapshot?.documents.forEach { doc in
+                batch.updateData(["username": newName], forDocument: doc.reference)
+            }
+            
+            // 4. Update names in any post this user liked
+            socialsRef.whereField("likedBy", arrayContains: email).getDocuments { likedSnap, _ in
+                likedSnap?.documents.forEach { doc in
+                    batch.updateData(["likedByNames": FieldValue.arrayRemove([oldName])], forDocument: doc.reference)
+                    batch.updateData(["likedByNames": FieldValue.arrayUnion([newName])], forDocument: doc.reference)
+                }
+                
+                // Final Atomic Commit
+                batch.commit { error in
+                    if let error = error {
+                        completion(false, error.localizedDescription)
+                    } else {
+                        completion(true, nil)
+                    }
+                }
             }
         }
     }
@@ -244,38 +281,55 @@ class FirestoreManager: ObservableObject {
     
     // MARK: - Socials Feed Listener
     
-    func updateUsernameEverywhere(email: String, oldUsername: String, newUsername: String) {
-        let socialsRef = db.collection("socials")
+    func updateUsernameEverywhere(email: String, oldUsername: String, newUsername: String, completion: @escaping (Bool, String?) -> Void) {
+        let usersRef = db.collection("users")
         
-        // Query posts authored by the user
-        socialsRef.whereField("userEmail", isEqualTo: email).getDocuments { snapshot, _ in
-            let batch = self.db.batch()
-            
-            snapshot?.documents.forEach { doc in
-                batch.updateData(["username": newUsername], forDocument: doc.reference)
+        // 1. Check for duplicates first
+        usersRef.whereField("username", isEqualTo: newUsername).getDocuments { snapshot, error in
+            if let docs = snapshot?.documents, !docs.isEmpty {
+                // Check if the only person with this name is actually the current user
+                let isDuplicate = docs.contains { $0.documentID != email }
+                if isDuplicate {
+                    completion(false, "Username is already taken.")
+                    return
+                }
             }
+
+            // 2. Proceed with updating the Profile and all Posts
+            let batch = self.db.batch()
+            let socialsRef = self.db.collection("socials")
             
-            // Query posts liked by the user
-            socialsRef.whereField("likedBy", arrayContains: email).getDocuments { likedSnapshot, _ in
-                
-                likedSnapshot?.documents.forEach { doc in
-                    // In Firestore, you can't "update" a specific index in an array easily.
-                    // We remove the old name and add the new one.
-                    batch.updateData([
-                        "likedByNames": FieldValue.arrayRemove([oldUsername])
-                    ], forDocument: doc.reference)
-                    
-                    batch.updateData([
-                        "likedByNames": FieldValue.arrayUnion([newUsername])
-                    ], forDocument: doc.reference)
+            // Update the main user document
+            let userDocRef = usersRef.document(email)
+            batch.updateData(["username": newUsername], forDocument: userDocRef)
+
+            // Query posts authored by the user to update author name
+            socialsRef.whereField("userEmail", isEqualTo: email).getDocuments { snapshot, _ in
+                snapshot?.documents.forEach { doc in
+                    batch.updateData(["username": newUsername], forDocument: doc.reference)
                 }
                 
-                // Commit all changes at once
-                batch.commit { error in
-                    if let error = error {
-                        print("Batch update failed: \(error.localizedDescription)")
-                    } else {
-                        print("Username updated in posts and likes successfully!")
+                // Query posts liked by the user to update name in "likedByNames"
+                socialsRef.whereField("likedBy", arrayContains: email).getDocuments { likedSnapshot, _ in
+                    likedSnapshot?.documents.forEach { doc in
+                        // Remove old name and add new name in the same batch
+                        batch.updateData([
+                            "likedByNames": FieldValue.arrayRemove([oldUsername])
+                        ], forDocument: doc.reference)
+                        
+                        batch.updateData([
+                            "likedByNames": FieldValue.arrayUnion([newUsername])
+                        ], forDocument: doc.reference)
+                    }
+                    
+                    // 3. Commit all changes
+                    batch.commit { error in
+                        if let error = error {
+                            print("Batch update failed: \(error.localizedDescription)")
+                            completion(false, error.localizedDescription)
+                        } else {
+                            completion(true, nil)
+                        }
                     }
                 }
             }
@@ -382,7 +436,10 @@ class FirestoreManager: ObservableObject {
                             id: doc.documentID,
                             username: data["username"] as? String ?? "",
                             selfie: data["selfie"] as? String ?? "",
-                            following: data["following"] as? [String] ?? []
+                            userAvatarURL: data["avatarURL"] as? String,
+                            bio: data["bio"] as? String ?? "",
+                            following: data["following"] as? [String] ?? [],
+                            hasProfile: data["hasProfile"] as? Bool ?? false
                         )
                     }
                 }
@@ -414,7 +471,10 @@ class FirestoreManager: ObservableObject {
                             id: doc.documentID,
                             username: data["username"] as? String ?? "",
                             selfie: data["selfie"] as? String ?? "",
-                            following: data["following"] as? [String] ?? []
+                            userAvatarURL: data["avatarURL"] as? String,
+                            bio: data["bio"] as? String ?? "",
+                            following: data["following"] as? [String] ?? [],
+                            hasProfile: data["hasProfile"] as? Bool ?? false
                         )
                     }
                 }

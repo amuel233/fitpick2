@@ -15,6 +15,8 @@ struct ClosetHeaderView: View {
     @Binding var tryOnImage: UIImage?
     @Binding var tryOnMessage: String?
     
+    @ObservedObject var firestoreManager = FirestoreManager.shared
+    
     var onSave: (() -> Void)?
     var onShowHistory: (() -> Void)?
     
@@ -79,41 +81,29 @@ struct ClosetHeaderView: View {
                         .frame(height: 350)
                         
                     // 5. EXISTING AVATAR
-                    } else if let urlStr = viewModel.userAvatarURL, let url = URL(string: urlStr) {
+                    }
+                    // Determine which avatar to show.
+                    // If isGuest is true, use the App Owner's twin from firestoreManager.
+                    // If not, use the viewModel's twin (your own).
+                    let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
+                    
+                    if let urlStr = avatarToDisplay, let url = URL(string: urlStr) {
                         KFImage(url)
                             .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
                             .resizable()
                             .scaledToFill()
                             .frame(width: 340)
                             .clipped()
-                            .layoutPriority(1)
                             .onTapGesture { showZoomedImage = true }
                             .id(urlStr)
-                        
                     } else {
-                        // 6. EMPTY STATE (Generate Button)
-                        Button(action: {
-                            generateAvatar()
-                        }) {
+                        // Empty State / Generate Button
+                        Button(action: { generateAvatar() }) {
                             VStack(spacing: 15) {
-                                Image(systemName: "sparkles.rectangle.stack")
-                                    .font(.system(size: 50, weight: .light))
-                                    .foregroundColor(.luxeEcru)
-                                
-                                VStack(spacing: 5) {
-                                    Text("TAP TO GENERATE AVATAR")
-                                        .font(.headline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.luxeFlax)
-                                        .tracking(1)
-                                    Text("Create a digital twin")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.6))
-                                }
+                                Image(systemName: "sparkles.rectangle.stack").font(.system(size: 50, weight: .light)).foregroundColor(.luxeEcru)
+                                Text("TAP TO GENERATE AVATAR").font(.headline).foregroundColor(.luxeFlax)
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 350)
-                            .background(Color.black.opacity(0.2))
+                            .frame(maxWidth: .infinity).frame(height: 350)
                         }
                     }
                 }
@@ -191,7 +181,9 @@ struct ClosetHeaderView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .fullScreenCover(isPresented: $showZoomedImage) {
-            HeaderZoomView(image: tryOnImage, imageURL: viewModel.userAvatarURL, onDismiss: { showZoomedImage = false })
+            // Update ZoomView to also respect the owner's avatar if guest
+            let zoomURL = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
+            HeaderZoomView(image: tryOnImage, imageURL: zoomURL, onDismiss: { showZoomedImage = false })
         }
     }
     

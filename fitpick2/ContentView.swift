@@ -28,89 +28,99 @@ struct MainTabView: View {
     @StateObject private var auth = AuthManager.shared
     @State private var showLogoutModal = false
     
-    let fitPickGold = Color("fitPickGold")
-    let fitPickOffWhite = Color(red: 245/255, green: 245/255, blue: 247/255)
+    // Updated to Luxe Theme Colors
+    let fitPickGold = Color.luxeEcru
+    let editorBlack = Color.luxeDeepOnyx
+
+    init() {
+        // --- LUXURY TAB BAR STYLING ---
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = .black // Deepest base
+        
+        // Normal (Unselected) State - Muted Silver
+        // A middle ground: lighter than gray, but softer than pure white
+        let unselectedColor = UIColor.white.withAlphaComponent(0.4)
+        appearance.stackedLayoutAppearance.normal.iconColor = unselectedColor
+        appearance.stackedLayoutAppearance.normal.titleTextAttributes = [
+            .foregroundColor: unselectedColor,
+            .font: UIFont.systemFont(ofSize: 10, weight: .medium)
+        ]
+        
+        // Selected State - Luxe Flax Gold
+        // Using the hex from your theme (EBD58D) for a premium gold look
+        let luxeFlaxUI = UIColor(red: 235/255, green: 213/255, blue: 141/255, alpha: 1.0)
+        appearance.stackedLayoutAppearance.selected.iconColor = luxeFlaxUI
+        appearance.stackedLayoutAppearance.selected.titleTextAttributes = [
+            .foregroundColor: luxeFlaxUI,
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold)
+        ]
+        
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
-            fitPickOffWhite.ignoresSafeArea()
+            // Background of the entire app: Updated to Spotlight Gradient
+            Color.luxeSpotlightGradient.ignoresSafeArea()
+            // Ambient Glows: Using Luxe palette colors for soft depth
+            GeometryReader { geo in
+                ZStack {
+                    Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
+                        .blur(radius: 150).opacity(0.08).offset(x: -150, y: -200)
+                    Circle().fill(Color.luxeFlax).frame(width: 300, height: 300)
+                        .blur(radius: 120).opacity(0.05).offset(x: 200, y: 100)
+                }
+            }
             
             TabView(selection: $appState.selectedTab) {
-                // Each view handles its own internal navigation if needed
                 HomeView()
-                    .tabItem { Label("Home", systemImage: "house") }
+                    .tabItem { Label("HOME", systemImage: "house") }
                     .tag(0)
 
                 BodyMeasurementView()
-                    .tabItem { Label("Body Measurement", systemImage: "ruler") }
+                    .tabItem { Label("MEASUREMENT", systemImage: "ruler") }
                     .tag(1)
                 
                 ClosetView()
-                    .tabItem { Label("Closet", systemImage: "hanger") }
+                    .tabItem { Label("CLOSET", systemImage: "hanger") }
                     .tag(2)
                 
                 SocialsView()
-                    .tabItem { Label("Socials", systemImage: "person.2") }
+                    .tabItem { Label("SOCIALS", systemImage: "person.2") }
                     .tag(3)
             }
             .accentColor(fitPickGold)
+            .blur(radius: showLogoutModal ? 10 : 0) // Aesthetic editorial blur
+            .luxeAlert(
+                isPresented: $showLogoutModal,
+                title: "LEAVING SO SOON?",
+                message: "Your style profile will be safely archived.",
+                confirmTitle: "LOGOUT",
+                cancelTitle: "STAY CHIC",
+                onConfirm: {
+                    showLogoutModal = false
+                    auth.logout()
+                }
+            )
 
-            // MARK: - Floating Logout Button
+            // Branded Logout Trigger (Only on Home)
             if appState.selectedTab == 0 {
                 HStack {
                     Spacer()
-                    Button(action: { showLogoutModal = true }) {
+                    Button(action: { withAnimation { showLogoutModal = true } }) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundColor(.luxeBlack) // Changed for contrast
                             .padding(10)
-                            .background(fitPickGold)
+                            .background(Color.luxeGoldGradient) // Updated to Luxe Gradient
                             .clipShape(Circle())
-                            .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 22)
             }
-
-            if showLogoutModal {
-                logoutModalOverlay
-            }
         }
-    }
-
-    private var logoutModalOverlay: some View {
-        ZStack {
-            Color.clear.ignoresSafeArea()
-                .onTapGesture { withAnimation { showLogoutModal = false } }
-
-            VStack(spacing: 25) {
-                Image(systemName: "door.right.hand.open")
-                    .font(.system(size: 60)).foregroundColor(fitPickGold)
-                
-                VStack(spacing: 8) {
-                    Text("Logging out?").font(.title.bold())
-                    if let email = session.email {
-                        Text(email).font(.subheadline).foregroundColor(.gray)
-                    }
-                }
-
-                VStack(spacing: 16) {
-                    Button("Confirm Logout") {
-                        showLogoutModal = false
-                        auth.logout()
-                    }
-                    .fontWeight(.bold).foregroundColor(.white).frame(maxWidth: .infinity)
-                    .padding().background(fitPickGold).cornerRadius(12)
-
-                    Button("Cancel") { showLogoutModal = false }
-                        .fontWeight(.semibold).foregroundColor(fitPickGold).frame(maxWidth: .infinity)
-                        .padding().overlay(RoundedRectangle(cornerRadius: 12).stroke(fitPickGold, lineWidth: 1))
-                }
-                .padding(.horizontal, 40)
-            }
-            .padding(30).background(Color.white).cornerRadius(24).padding(.horizontal, 30)
-        }
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
     }
 }
