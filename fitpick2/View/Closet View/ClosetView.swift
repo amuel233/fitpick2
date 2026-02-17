@@ -94,7 +94,7 @@ struct ClosetView: View {
                             Capsule().fill(Color.luxeGoldGradient)
                                 .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
                             
-                            // 2. Actions (Restored)
+                            // 2. Actions
                             ClosetActionButtons(
                                 viewModel: viewModel,
                                 selectedItemIDs: viewModel.selectedItemIDs,
@@ -104,14 +104,13 @@ struct ClosetView: View {
                                 isGuest: targetUserEmail != nil
                             ).padding(.bottom, 20)
                             
-                            // 3. Filters (Restored)
+                            // 3. Filters
                             ClosetFilterView(selectedCategory: $viewModel.selectedCategory).padding(.bottom, 20)
                         }
                         .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
                         
                         // --- CONTENT ---
                         ScrollView {
-                            // Inventory Grid (Restored)
                             InventoryGrid(
                                 viewModel: viewModel,
                                 itemToDelete: $itemToDelete,
@@ -185,7 +184,7 @@ struct ClosetView: View {
     }
 }
 
-// MARK: - Action Buttons (RESTORED)
+// MARK: - Action Buttons
 struct ClosetActionButtons: View {
     @ObservedObject var viewModel: ClosetViewModel
     let selectedItemIDs: Set<String>
@@ -221,7 +220,7 @@ struct ClosetActionButtons: View {
 struct GlassIconButton: View { let icon: String; let action: () -> Void; var body: some View { Button(action: action) { GlassIconView(icon: icon) } } }
 struct GlassIconView: View { let icon: String; var body: some View { Image(systemName: icon).font(.title3).foregroundColor(.luxeBeige).frame(width: 54, height: 54).background(.ultraThinMaterial).environment(\.colorScheme, .dark).clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).shadow(color: .black.opacity(0.2), radius: 5) } }
 
-// MARK: - Filters (RESTORED)
+// MARK: - Filters
 struct ClosetFilterView: View {
     @Binding var selectedCategory: ClothingCategory?
     var body: some View {
@@ -248,10 +247,18 @@ struct FilterIcon: View {
     }
 }
 
-// MARK: - Grid (RESTORED)
+// MARK: - Grid (FIXED DIMENSIONS)
 struct InventoryGrid: View {
     @ObservedObject var viewModel: ClosetViewModel; @Binding var itemToDelete: ClothingItem?; @Binding var showingDeleteAlert: Bool; @Binding var zoomedItem: ClothingItem?; let isOwner: Bool
-    let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    
+    // ✅ FIX: Reverted to 3 Flexible columns.
+    // This guarantees 3 uniform columns on Pro Max, fixing "broken dimensions".
+    let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
+    
     var body: some View {
         LazyVGrid(columns: columns, spacing: 12) {
             let items = viewModel.filteredItems
@@ -272,14 +279,13 @@ struct InventoryItemCard: View {
     }
 }
 
-// MARK: - Zoom Overlay (UPDATED WITH CATEGORY PICKER)
+// MARK: - Zoom Overlay
 struct ZoomOverlayView: View {
     let item: ClothingItem
     let onDismiss: () -> Void
     let isOwner: Bool
     @ObservedObject var viewModel: ClosetViewModel
     
-    // --- EDITING STATES ---
     @State private var editedCategory: ClothingCategory
     @State private var editedSubCategory: String
     @State private var editedSize: String
@@ -291,8 +297,6 @@ struct ZoomOverlayView: View {
         self.onDismiss = onDismiss
         self.isOwner = isOwner
         self.viewModel = viewModel
-        
-        // Initialize editing states from item data
         _editedCategory = State(initialValue: item.category)
         _editedSubCategory = State(initialValue: item.subCategory)
         _editedSize = State(initialValue: item.size)
@@ -314,9 +318,7 @@ struct ZoomOverlayView: View {
                 // 2. Info / Edit Section
                 VStack(spacing: 12) {
                     if isEditing {
-                        // --- EDIT MODE ---
                         VStack(spacing: 15) {
-                            // ✅ Category Picker
                             Picker("Category", selection: $editedCategory) {
                                 ForEach(ClothingCategory.allCases) { category in
                                     Text(category.rawValue).tag(category)
@@ -324,18 +326,15 @@ struct ZoomOverlayView: View {
                             }
                             .pickerStyle(SegmentedPickerStyle())
                             .onAppear {
-                                // Enforce light appearance for readability on dark glass
                                 UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(Color.luxeFlax)
                                 UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.black], for: .selected)
                                 UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.white], for: .normal)
                             }
 
-                            // Subcategory Field
                             TextField("Subcategory (e.g. Blouse)", text: $editedSubCategory)
                                 .textFieldStyle(GlassTextFieldStyle())
                                 .multilineTextAlignment(.center)
                             
-                            // Size Field
                             TextField("Size (e.g. M)", text: $editedSize)
                                 .textFieldStyle(GlassTextFieldStyle())
                                 .frame(width: 120)
@@ -343,7 +342,6 @@ struct ZoomOverlayView: View {
                         }
                         .padding(.horizontal)
                         
-                        // Actions
                         HStack(spacing: 20) {
                             Button(action: { withAnimation { isEditing = false } }) {
                                 Image(systemName: "xmark").font(.title3).foregroundColor(.white.opacity(0.7))
@@ -358,9 +356,7 @@ struct ZoomOverlayView: View {
                         }.padding(.top, 5)
                         
                     } else {
-                        // --- DISPLAY MODE ---
                         VStack(spacing: 5) {
-                            // ✅ Display Category
                             Text(item.category.rawValue.uppercased())
                                 .font(.caption).bold()
                                 .foregroundColor(.white.opacity(0.6))
@@ -400,18 +396,15 @@ struct ZoomOverlayView: View {
         }
     }
     
-    // --- ViewModel Action ---
     func saveChanges() {
         isSaving = true
         Task {
-            // ✅ Calls ViewModel with new Category
             await viewModel.updateItemDetails(
                 item: item,
                 newCategory: editedCategory,
                 newSubCategory: editedSubCategory,
                 newSize: editedSize
             )
-            
             await MainActor.run {
                 withAnimation {
                     isEditing = false
@@ -422,16 +415,45 @@ struct ZoomOverlayView: View {
     }
 }
 
-// MARK: - History Views (RESTORED)
+// MARK: - History Views
 struct HistorySheetView: View {
-    @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?; let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?
+    
+    // ✅ FIX: Changed to Adaptive with min 160.
+    // Result: 2 columns on small/medium phones (Fixes overlap).
+    // Result: 2-3 columns on Pro Max (Looks spaced out).
+    let columns = [
+        GridItem(.adaptive(minimum: 160), spacing: 15)
+    ]
+    
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.luxeRichCharcoal.ignoresSafeArea()
                 ScrollView {
                     if viewModel.savedLooks.isEmpty { VStack(spacing: 20) { Image(systemName: "photo.stack").font(.system(size: 50)).foregroundColor(.luxeEcru.opacity(0.6)); Text("No saved looks").font(.headline).foregroundColor(.luxeBeige) }.padding(.top, 100) }
-                    else { LazyVGrid(columns: columns, spacing: 12) { ForEach(viewModel.savedLooks) { look in ZStack(alignment: .topTrailing) { KFImage(URL(string: look.imageURL)).resizable().scaledToFill().frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1)).contentShape(Rectangle()).onTapGesture { selectedLook = look }; Menu { Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }; Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) } } label: { Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle()) }.padding(6) } } }.padding() }
+                    else {
+                        LazyVGrid(columns: columns, spacing: 15) {
+                            ForEach(viewModel.savedLooks) { look in
+                                ZStack(alignment: .topTrailing) {
+                                    KFImage(URL(string: look.imageURL))
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 180)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                                        .contentShape(Rectangle()).onTapGesture { selectedLook = look }
+                                    
+                                    Menu {
+                                        Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }
+                                        Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) }
+                                    } label: {
+                                        Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle())
+                                    }.padding(6)
+                                }
+                            }
+                        }.padding()
+                    }
                 }
             }
             .navigationTitle("Look History").navigationBarTitleDisplayMode(.inline).toolbarBackground(Color.luxeRichCharcoal, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
@@ -452,7 +474,7 @@ struct HistoryZoomView: View {
     }
 }
 
-// MARK: - Helper Views & Shapes (RESTORED)
+// MARK: - Helper Views & Shapes
 struct RoundedCorner: Shape { var radius: CGFloat = .infinity; var corners: UIRectCorner = .allCorners; func path(in rect: CGRect) -> Path { let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius)); return Path(path.cgPath) } }
 extension View { func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View { clipShape(RoundedCorner(radius: radius, corners: corners)) } }
 
