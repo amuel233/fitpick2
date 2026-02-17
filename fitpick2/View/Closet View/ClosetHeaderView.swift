@@ -62,17 +62,36 @@ struct ClosetHeaderView: View {
                          }
                          .frame(height: 350)
                         
-                    // 3. TRY-ON RESULT
+                    // ✅ 3. PRIORITY: GENERATING TRY-ON (FIXED)
+                    // Added this block so you see a spinner while the AI styles the outfit
+                    } else if viewModel.isGeneratingTryOn {
+                        VStack(spacing: 15) {
+                            ProgressView().tint(Color.luxeEcru)
+                            VStack(spacing: 5) {
+                                Text("STYLING OUTFIT")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.luxeFlax)
+                                    .tracking(2)
+                                Text("Applying garments...")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                        .frame(height: 350)
+
+                    // 4. TRY-ON RESULT
                     } else if let tryOn = tryOnImage {
                         Image(uiImage: tryOn)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 340)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 350)
                             .clipped()
                             .layoutPriority(1)
                             .onTapGesture { showZoomedImage = true }
                         
-                    // 4. ERROR MESSAGE
+                    // 5. ERROR MESSAGE
                     } else if let message = tryOnMessage {
                         VStack {
                             Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(.luxeEcru)
@@ -80,11 +99,8 @@ struct ClosetHeaderView: View {
                         }
                         .frame(height: 350)
                         
-                    // 5. EXISTING AVATAR
+                    // 6. EXISTING AVATAR (Default Fallback)
                     } else {
-                        // Determine which avatar to show.
-                        // If isGuest is true, use the App Owner's twin from firestoreManager.
-                        // If not, use the viewModel's twin (your own).
                         let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
                         
                         if let urlStr = avatarToDisplay, let url = URL(string: urlStr) {
@@ -92,7 +108,8 @@ struct ClosetHeaderView: View {
                                 .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 340)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 350)
                                 .clipped()
                                 .onTapGesture { showZoomedImage = true }
                                 .id(urlStr)
@@ -108,7 +125,7 @@ struct ClosetHeaderView: View {
                         }
                     }
                 }
-                .frame(width: 340)
+                .frame(maxWidth: 380)
                 .frame(minHeight: 350, maxHeight: 500)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay(
@@ -119,21 +136,20 @@ struct ClosetHeaderView: View {
                         )
                 )
                 .shadow(color: .black.opacity(0.4), radius: 15, x: 0, y: 10)
+                .padding(.horizontal, 20)
                 
                 // MARK: - FLOATING CONTROLS
                 VStack(spacing: 12) {
-                    // History Button
                     if !isGuest {
                         Button(action: { onShowHistory?() }) {
                             CircleButton(
-                                icon: "photo.stack", // ✅ UPDATED ICON
+                                icon: "photo.stack",
                                 iconColor: .luxeEcru,
                                 bgColor: Color.black.opacity(0.6)
                             )
                         }
                     }
                     
-                    // Save Look
                     if tryOnImage != nil && !isGuest {
                         Button(action: { if !isSaved { onSave?() } }) {
                             CircleButton(
@@ -146,7 +162,6 @@ struct ClosetHeaderView: View {
                         .disabled(isSaving || isSaved)
                     }
                     
-                    // Close / Reset
                     if tryOnImage != nil || tryOnMessage != nil {
                         Button(action: {
                             withAnimation {
@@ -159,7 +174,6 @@ struct ClosetHeaderView: View {
                         }
                     }
                     
-                    // Regenerate Avatar
                     if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
                         Button(action: {
                             generateAvatar()
@@ -176,13 +190,13 @@ struct ClosetHeaderView: View {
                     }
                 }
                 .padding(12)
+                .padding(.trailing, 20)
             }
             .padding(.top, 10)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .fullScreenCover(isPresented: $showZoomedImage) {
-            // Update ZoomView to also respect the owner's avatar if guest
             let zoomURL = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
             HeaderZoomView(image: tryOnImage, imageURL: zoomURL, onDismiss: { showZoomedImage = false })
         }
@@ -201,8 +215,7 @@ struct ClosetHeaderView: View {
     }
 }
 
-// MARK: - Helper Views
-
+// MARK: - Helper Views & Zoom (Retained)
 struct CircleButton: View {
     let icon: String
     let iconColor: Color
@@ -240,26 +253,49 @@ struct HeaderZoomView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea().onTapGesture(perform: onDismiss)
+            Color.black.ignoresSafeArea().onTapGesture(perform: onDismiss).zIndex(0)
             
-            if let img = image {
-                Image(uiImage: img).resizable().scaledToFit()
-            } else if let urlStr = imageURL, let url = URL(string: urlStr) {
-                KFImage(url).resizable().scaledToFit()
-            }
-            
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .padding()
+            GeometryReader { proxy in
+                if let img = image {
+                    ZoomableScrollView {
+                        Image(uiImage: img).resizable().scaledToFit().frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                } else if let urlStr = imageURL, let url = URL(string: urlStr) {
+                    ZoomableScrollView {
+                        KFImage(url).resizable().scaledToFit().frame(width: proxy.size.width, height: proxy.size.height)
                     }
                 }
-                Spacer()
-            }
+            }.zIndex(1)
+            
+            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark.circle.fill").font(.system(size: 30)).foregroundColor(.white.opacity(0.8)).padding(.top, 50).padding(.trailing, 20).shadow(radius: 5) } }; Spacer() }.zIndex(2)
         }
+    }
+}
+
+struct ZoomableScrollView<Content: View>: UIViewRepresentable {
+    private var content: Content
+    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.maximumZoomScale = 5.0
+        scrollView.minimumZoomScale = 1.0
+        scrollView.bouncesZoom = true
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+        let hostedView = context.coordinator.hostingController.view!
+        hostedView.translatesAutoresizingMaskIntoConstraints = true
+        hostedView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hostedView.backgroundColor = .clear
+        scrollView.addSubview(hostedView)
+        return scrollView
+    }
+    func updateUIView(_ uiView: UIScrollView, context: Context) { context.coordinator.hostingController.rootView = content; uiView.setNeedsLayout() }
+    func makeCoordinator() -> Coordinator { Coordinator(hostingController: UIHostingController(rootView: content)) }
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        var hostingController: UIHostingController<Content>
+        init(hostingController: UIHostingController<Content>) { self.hostingController = hostingController }
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { return hostingController.view }
     }
 }
