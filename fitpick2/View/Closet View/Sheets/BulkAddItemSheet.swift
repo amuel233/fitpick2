@@ -114,8 +114,25 @@ struct BulkItemRow: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(item.isClothing ? Color.luxeEcru.opacity(0.5) : Color.red, lineWidth: item.isClothing ? 1 : 2))
             
             VStack(alignment: .leading, spacing: 10) {
-                if item.isValidating { Text("Validating...").font(.caption).foregroundColor(.luxeEcru) }
-                else if !item.isClothing { Label("Not clothing", systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundColor(.red).bold() }
+                if item.isValidating {
+                    Text("Validating...").font(.caption).foregroundColor(.luxeEcru)
+                } else if !item.isClothing {
+                    // ✅ FIXED: Changed Label to Button to allow manual override
+                    Button(action: {
+                        withAnimation { item.isClothing = true }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text("Not clothing (Tap to Keep)")
+                        }
+                        .font(.caption.bold())
+                        .foregroundColor(.red)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                }
                 
                 HStack {
                     Menu {
@@ -136,6 +153,7 @@ struct BulkItemRow: View {
         }
         .padding(12).background(.ultraThinMaterial).environment(\.colorScheme, .dark).cornerRadius(16)
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+        // Opacity reflects validity; if manually overridden to true, it becomes fully opaque (1.0)
         .opacity(item.isClothing ? 1.0 : 0.6)
     }
 }
