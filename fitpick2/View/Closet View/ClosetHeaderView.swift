@@ -142,7 +142,7 @@ struct ClosetHeaderView: View {
                     if !isGuest {
                         Button(action: { onShowHistory?() }) {
                             CircleButton(
-                                icon: "clock.arrow.circlepath",
+                                icon: "photo.stack",
                                 iconColor: luxeEcru,
                                 bgColor: Color.black.opacity(0.6)
                             )
