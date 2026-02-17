@@ -190,19 +190,34 @@ class ClosetViewModel: ObservableObject {
 
             var promptParts: [any Part] = []
             promptParts.append(TextPart("""
-            ROLE: Virtual Fashion Stylist.
-            TASK: Generate a high-quality fashion visualization of a mannequin wearing the selected outfit.
-            VISUAL REQUIREMENTS (STRICT):
-            1. POSE: Front-facing, standing straight. Arms slightly away from body (A-Pose).
-            2. BODY & GENDER (CRITICAL): Target Gender: \(gender). Match User Measurements: \(measurementString). Sample SKIN TONE from Image 1.
-            3. HEAD & FACE: Render a DEFINED MANNEQUIN HEAD. Face must be ABSTRACT/STYLIZED.
-            4. BACKGROUND: Pure White (#FFFFFF).
+            [SYSTEM ROLE]: EXPERT 3D CHARACTER ARTIST & VIRTUAL STYLIST.
+            [TASK]: Composite the clothing items onto the User's 3D Avatar (Image 1).
+            
+            [INPUTS]:
+            1. BASE AVATAR: The first image provided. This is the GROUND TRUTH for Identity, Pose, Body Shape, and Face.
+            2. GARMENTS: All subsequent images are the clothes to be worn.
+            
+            [VISUAL FIDELITY MANDATE]:
+            - IDENTITY LOCK: You MUST preserve the exact face, skin tone, hairstyle, and body proportions of the BASE AVATAR.
+            - POSE LOCK: Maintain the exact standing A-pose of the BASE AVATAR.
+            - GENDER & BUILD: Target Gender: \(gender). Measurements: \(measurementString).
+            
+            [STYLING INSTRUCTIONS]:
+            - DRESS the Avatar in the provided garments.
+            - Ensure clothes drape naturally over the 3D mesh (Unreal Engine 5 style physics).
+            - Replace the Avatar's original outfit with the new selection.
+            
+            [ENVIRONMENT & COMPOSITION]:
+            - STYLE: High-Fidelity 3D Render (Digital Twin).
+            - BACKGROUND: Professional Gray Studio Background with Soft Gradient Lighting (Darker edges, lighter center).
+            - FRAMING: Full Body (Head to Toe). Do not crop the head or feet.
+            - ASPECT RATIO: Vertical Portrait (to fit mobile screen).
             """))
             
-            promptParts.append(TextPart("\n\nREFERENCE IMAGE (For Skin Tone & Body Shape):"))
+            promptParts.append(TextPart("\n\n[BASE AVATAR IMAGE]:"))
             if let avatarJPG = baseAvatarImage.jpegData(compressionQuality: 0.9) { promptParts.append(InlineDataPart(data: avatarJPG, mimeType: "image/jpeg")) }
             
-            promptParts.append(TextPart("\n\nGARMENTS TO WEAR:"))
+            promptParts.append(TextPart("\n\n[CLOTHING ITEMS]:"))
             for item in selectedClothes {
                 if let url = URL(string: item.remoteURL) {
                     let (data, _) = try await URLSession.shared.data(from: url)
@@ -212,7 +227,7 @@ class ClosetViewModel: ObservableObject {
                     }
                 }
             }
-            promptParts.append(TextPart("\n\nGENERATE: The final mannequin image."))
+            promptParts.append(TextPart("\n\nGENERATE: The final dressed 3D Avatar."))
             
             let content = ModelContent(role: "user", parts: promptParts)
             let response = try await imageGenModel.generateContent([content])
