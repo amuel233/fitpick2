@@ -13,16 +13,6 @@ import FirebaseAILogic
 import Kingfisher
 import Vision // Required for Image Validation
 
-// MARK: - Models
-
-/// Represents a previously generated outfit saved in Firestore history
-struct SavedLook: Identifiable {
-    let id: String
-    let imageURL: String
-    let date: Date
-    let itemsUsed: [String] // IDs of clothes used in this look
-}
-
 @MainActor
 class ClosetViewModel: ObservableObject {
     
@@ -130,65 +120,69 @@ class ClosetViewModel: ObservableObject {
     }
     
     // MARK: - 1. Data Fetching
-    
-    /// Main function to fetch items (Real-time Listener)
-    func fetchClothingItems() async {
-        guard let email = effectiveEmail else { return }
-        
-        listener = db.collection("clothes")
-            .whereField("ownerEmail", isEqualTo: email)
-            .order(by: "createdat", descending: true)
-            .addSnapshotListener { [weak self] querySnapshot, _ in
-                guard let documents = querySnapshot?.documents else { return }
-                self?.clothingItems = documents.compactMap { self?.mapDocumentToItem($0) }
-            }
-    }
+        /// Main function to fetch items (Real-time Listener)
+        func fetchClothingItems() async {
+            guard let email = effectiveEmail else { return }
+            
+            listener = db.collection("clothes") // or "users/{id}/closet" depending on your logic
+                .whereField("ownerEmail", isEqualTo: email)
+                // .order(by: "createdat", descending: true) // Uncomment if Index exists
+                .addSnapshotListener { [weak self] querySnapshot, _ in
+                    // ✅ FIX: Strong capture to fix 'Generic parameter could not be inferred'
+                    guard let self = self else { return }
+                    guard let documents = querySnapshot?.documents else { return }
+                    
+                    self.clothingItems = documents.compactMap { self.mapDocumentToItem($0) }
+                }
+        }
     
     // MARK: - Firestore Mapper (Universal Compatibility)
-    private func mapDocumentToItem(_ document: QueryDocumentSnapshot) -> ClothingItem? {
-        let data = document.data()
-        
-        // 1. UNIVERSAL URL CHECK
-        // Try "remoteURL" (Manual) OR "imageURL" (Smart Scan/Legacy)
-        guard let urlString = data["remoteURL"] as? String ?? data["imageURL"] as? String else {
-            // print("⚠️ Skipped Item \(document.documentID): No Image URL found.")
-            return nil
-        }
-        
-        // 2. UNIVERSAL SUBCATEGORY CHECK
-        // Try "subCategory" (CamelCase) OR "subcategory" (Lowercase) -> Default to "Clothing"
-        let subCategory = data["subCategory"] as? String ?? data["subcategory"] as? String ?? "Clothing"
-        
-        // 3. ROBUST CATEGORY MATCHING
-        let rawCat = data["category"] as? String ?? "Top"
-        let category: ClothingCategory
-        
-        // Handle Capitalization/Plurals/Synonyms
-        if let exactMatch = ClothingCategory(rawValue: rawCat) {
-            category = exactMatch
-        } else {
-            let normalized = rawCat.lowercased().trimmingCharacters(in: .whitespaces)
-            switch normalized {
-            case "top", "tops", "t-shirt", "shirt", "blouse": category = .top
-            case "bottom", "bottoms", "pant", "pants", "jeans", "shorts", "skirt": category = .bottom
-            case "shoe", "shoes", "sneakers", "boots", "footwear": category = .shoes
-            case "accessories", "accessory", "hat", "bag", "jewelry": category = .accessories
-            default: category = .top // Fallback
+        private func mapDocumentToItem(_ document: QueryDocumentSnapshot) -> ClothingItem? {
+            let data = document.data()
+            
+            // 1. UNIVERSAL URL CHECK
+            guard let urlString = data["remoteURL"] as? String ?? data["imageURL"] as? String else {
+                return nil
             }
+            
+            // 2. UNIVERSAL SUBCATEGORY CHECK
+            let subCategory = data["subCategory"] as? String ?? data["subcategory"] as? String ?? "Clothing"
+            
+            // 3. ROBUST CATEGORY MATCHING
+            let rawCat = data["category"] as? String ?? "Top"
+            let category: ClothingCategory
+            
+            if let exactMatch = ClothingCategory(rawValue: rawCat) {
+                category = exactMatch
+            } else {
+                let normalized = rawCat.lowercased().trimmingCharacters(in: .whitespaces)
+                switch normalized {
+                case "top", "tops", "t-shirt", "shirt", "blouse": category = .top
+                case "bottom", "bottoms", "pant", "pants", "jeans", "shorts", "skirt": category = .bottom
+                case "shoe", "shoes", "sneakers", "boots", "footwear": category = .shoes
+                case "accessories", "accessory", "hat", "bag", "jewelry": category = .accessories
+                default: category = .top
+                }
+            }
+            
+            // 4. SIZE CHECK
+            let size = data["size"] as? String ?? ""
+            
+            // 5. OWNER EMAIL & DATE
+            let ownerEmail = data["ownerEmail"] as? String ?? ""
+            let dateAdded = (data["createdat"] as? Timestamp)?.dateValue() ?? Date()
+            
+            // 6. Create Item (✅ Fixed missing arguments)
+            return ClothingItem(
+                id: document.documentID,
+                remoteURL: urlString,
+                category: category,
+                subCategory: subCategory,
+                size: size,
+                ownerEmail: ownerEmail, // ✅ Added
+                dateAdded: dateAdded    // ✅ Added (Optional but good for sorting)
+            )
         }
-        
-        // 4. SIZE CHECK
-        let size = data["size"] as? String ?? ""
-        
-        // 5. Create Item
-        return ClothingItem(
-            id: document.documentID,
-            remoteURL: urlString,
-            category: category,
-            subCategory: subCategory,
-            size: size
-        )
-    }
     
     func listenToUserProfile() {
             guard let email = effectiveEmail else { return }
@@ -349,63 +343,67 @@ class ClosetViewModel: ObservableObject {
     // MARK: - 3. Add Item Logic
     
     // Manual Save (Supports Bulk Upload)
-    func saveManualItem(image: UIImage, category: ClothingCategory, subCategory: String, size: String) async {
-        guard let user = Auth.auth().currentUser else { return }
-        
-        // 1. Compress Image
-        guard let imageData = image.jpegData(compressionQuality: 0.6) else { return }
-        
-        // 2. Upload to Storage
-        let filename = "\(UUID().uuidString).jpg"
-        let storageRef = Storage.storage().reference().child("users/\(user.uid)/closet/\(filename)")
-        
-        do {
-            let _ = try await storageRef.putDataAsync(imageData)
-            let downloadURL = try await storageRef.downloadURL()
+        func saveManualItem(image: UIImage, category: ClothingCategory, subCategory: String, size: String) async {
+            guard let user = Auth.auth().currentUser else { return }
             
-            // 3. Create the New Item Model
-            let newItem = ClothingItem(
-                id: UUID().uuidString,
-                remoteURL: downloadURL.absoluteString,
-                category: category,
-                subCategory: subCategory,
-                size: size
-            )
+            // 1. Compress Image
+            guard let imageData = image.jpegData(compressionQuality: 0.6) else { return }
             
-            // 4. Save to Firestore
-            try await Firestore.firestore()
-                .collection("users") // Or "clothes" depending on your data model preference, but keeping consistency with prompt
-                .document(user.uid)
-                .collection("closet") // OR .collection("clothes") - CHECK YOUR DB STRUCTURE
-                .document(newItem.id)
-                .setData([
-                    "id": newItem.id,
+            // 2. Upload to Storage
+            let filename = "\(UUID().uuidString).jpg"
+            let storageRef = Storage.storage().reference().child("users/\(user.uid)/closet/\(filename)")
+            
+            do {
+                let _ = try await storageRef.putDataAsync(imageData)
+                let downloadURL = try await storageRef.downloadURL()
+                
+                // 3. Create the New Item Model (✅ Fixed Missing Arguments)
+                let newItem = ClothingItem(
+                    id: UUID().uuidString,
+                    remoteURL: downloadURL.absoluteString,
+                    category: category,
+                    subCategory: subCategory,
+                    size: size,
+                    ownerEmail: user.email ?? "", // ✅ Added
+                    dateAdded: Date()             // ✅ Added
+                )
+                
+                // 4. Save to Firestore
+                try await Firestore.firestore()
+                    .collection("users")
+                    .document(user.uid)
+                    .collection("closet")
+                    .document(newItem.id)
+                    .setData([
+                        "id": newItem.id,
+                        "remoteURL": newItem.remoteURL,
+                        "category": newItem.category.rawValue,
+                        "subCategory": newItem.subCategory,
+                        "size": newItem.size,
+                        "ownerEmail": newItem.ownerEmail,
+                        "createdat": FieldValue.serverTimestamp()
+                    ])
+                
+                // Also save to root 'clothes' collection
+                try await Firestore.firestore().collection("clothes").document(newItem.id).setData([
                     "remoteURL": newItem.remoteURL,
                     "category": newItem.category.rawValue,
                     "subCategory": newItem.subCategory,
                     "size": newItem.size,
-                    "ownerEmail": user.email ?? "", // Important for listener
+                    "ownerEmail": newItem.ownerEmail,
                     "createdat": FieldValue.serverTimestamp()
                 ])
-            
-            // Also save to root 'clothes' collection if that's where your listener looks
-            try await Firestore.firestore().collection("clothes").document(newItem.id).setData([
-                "remoteURL": newItem.remoteURL,
-                "category": newItem.category.rawValue,
-                "subCategory": newItem.subCategory,
-                "size": newItem.size,
-                "ownerEmail": user.email ?? "",
-                "createdat": FieldValue.serverTimestamp()
-            ])
+                    
+                // 5. Update Local State (UI)
+                await MainActor.run {
+                    self.clothingItems.append(newItem)
+                }
+                print("✅ Successfully saved: \(subCategory)")
                 
-            // 5. Update Local State (UI)
-            self.clothingItems.append(newItem)
-            print("✅ Successfully saved: \(subCategory)")
-            
-        } catch {
-            print("❌ Failed to save item: \(error.localizedDescription)")
+            } catch {
+                print("❌ Failed to save item: \(error.localizedDescription)")
+            }
         }
-    }
     
     // MARK: - Smart Scan / LiDAR Logic
         
@@ -426,54 +424,59 @@ class ClosetViewModel: ObservableObject {
             return "Unknown"
         }
 
-        /// Saves an Auto-Measured item (LiDAR / Smart Scan)
-        func saveAutoMeasuredItem(image: UIImage, category: String, subCategory: String, size: String, width: Double, length: Double) async {
-            guard let user = Auth.auth().currentUser else { return }
-            
-            await MainActor.run { isUploading = true }
-            
-            do {
-                guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
-                let fileName = "smart_\(UUID().uuidString).jpg"
-                let storageRef = storage.reference().child("users/\(user.uid)/closet/\(fileName)")
+
+    /// Saves an Auto-Measured item (LiDAR / Smart Scan)
+            func saveAutoMeasuredItem(image: UIImage, category: String, subCategory: String, size: String, width: Double, length: Double) async {
+                guard let user = Auth.auth().currentUser else { return }
                 
-                _ = try await storageRef.putDataAsync(imageData)
-                let downloadURL = try await storageRef.downloadURL()
+                await MainActor.run { isUploading = true }
                 
-                // Map String category to Enum
-                let catEnum = ClothingCategory(rawValue: category) ?? .top
-                
-                let newItem = ClothingItem(
-                    id: UUID().uuidString,
-                    remoteURL: downloadURL.absoluteString,
-                    category: catEnum,
-                    subCategory: subCategory,
-                    size: size
-                )
-                
-                // Save to Firestore
-                try await db.collection("users").document(user.uid).collection("closet").document(newItem.id).setData([
-                    "id": newItem.id,
-                    "remoteURL": newItem.remoteURL,
-                    "category": newItem.category.rawValue,
-                    "subCategory": newItem.subCategory,
-                    "size": newItem.size,
-                    "measurements": ["width": width, "length": length], // Store raw data
-                    "isAutoMeasured": true,
-                    "createdat": FieldValue.serverTimestamp()
-                ])
-                
-                await MainActor.run {
-                    self.clothingItems.append(newItem)
-                    self.isUploading = false
+                do {
+                    guard let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+                    let fileName = "smart_\(UUID().uuidString).jpg"
+                    let storageRef = storage.reference().child("users/\(user.uid)/closet/\(fileName)")
+                    
+                    _ = try await storageRef.putDataAsync(imageData)
+                    let downloadURL = try await storageRef.downloadURL()
+                    
+                    // Map String category to Enum
+                    let catEnum = ClothingCategory(rawValue: category) ?? .top
+                    
+                    // ✅ FIX: Added ownerEmail and dateAdded
+                    let newItem = ClothingItem(
+                        id: UUID().uuidString,
+                        remoteURL: downloadURL.absoluteString,
+                        category: catEnum,
+                        subCategory: subCategory,
+                        size: size,
+                        ownerEmail: user.email ?? "", // ✅ Added
+                        dateAdded: Date()             // ✅ Added
+                    )
+                    
+                    // Save to Firestore
+                    try await db.collection("users").document(user.uid).collection("closet").document(newItem.id).setData([
+                        "id": newItem.id,
+                        "remoteURL": newItem.remoteURL,
+                        "category": newItem.category.rawValue,
+                        "subCategory": newItem.subCategory,
+                        "size": newItem.size,
+                        "measurements": ["width": width, "length": length],
+                        "isAutoMeasured": true,
+                        "ownerEmail": newItem.ownerEmail, // ✅ Ensure consistency
+                        "createdat": FieldValue.serverTimestamp()
+                    ])
+                    
+                    await MainActor.run {
+                        self.clothingItems.append(newItem)
+                        self.isUploading = false
+                    }
+                    print("✅ Smart item saved successfully.")
+                    
+                } catch {
+                    print("❌ Error saving smart item: \(error.localizedDescription)")
+                    await MainActor.run { isUploading = false }
                 }
-                print("✅ Smart item saved successfully.")
-                
-            } catch {
-                print("❌ Error saving smart item: \(error.localizedDescription)")
-                await MainActor.run { isUploading = false }
             }
-        }
         
         /// Updates just the size of an item (used in Edit Mode)
         func updateItemSize(_ item: ClothingItem, newSize: String) {
