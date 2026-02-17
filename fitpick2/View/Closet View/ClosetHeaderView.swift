@@ -84,10 +84,9 @@ struct ClosetHeaderView: View {
                     } else if let tryOn = tryOnImage {
                         Image(uiImage: tryOn)
                             .resizable()
-                            .scaledToFill()
+                            .scaledToFit()
                             .frame(maxWidth: .infinity)
                             .frame(height: 350)
-                            .clipped()
                             .layoutPriority(1)
                             .onTapGesture { showZoomedImage = true }
                         
@@ -107,10 +106,9 @@ struct ClosetHeaderView: View {
                             KFImage(url)
                                 .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
                                 .resizable()
-                                .scaledToFill()
+                                .scaledToFit()
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 350)
-                                .clipped()
                                 .onTapGesture { showZoomedImage = true }
                                 .id(urlStr)
                         } else {
