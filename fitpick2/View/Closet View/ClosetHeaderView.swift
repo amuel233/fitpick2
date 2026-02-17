@@ -81,29 +81,30 @@ struct ClosetHeaderView: View {
                         .frame(height: 350)
                         
                     // 5. EXISTING AVATAR
-                    }
-                    // Determine which avatar to show.
-                    // If isGuest is true, use the App Owner's twin from firestoreManager.
-                    // If not, use the viewModel's twin (your own).
-                    let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
-                    
-                    if let urlStr = avatarToDisplay, let url = URL(string: urlStr) {
-                        KFImage(url)
-                            .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 340)
-                            .clipped()
-                            .onTapGesture { showZoomedImage = true }
-                            .id(urlStr)
                     } else {
-                        // Empty State / Generate Button
-                        Button(action: { generateAvatar() }) {
-                            VStack(spacing: 15) {
-                                Image(systemName: "sparkles.rectangle.stack").font(.system(size: 50, weight: .light)).foregroundColor(.luxeEcru)
-                                Text("TAP TO GENERATE AVATAR").font(.headline).foregroundColor(.luxeFlax)
+                        // Determine which avatar to show.
+                        // If isGuest is true, use the App Owner's twin from firestoreManager.
+                        // If not, use the viewModel's twin (your own).
+                        let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
+                        
+                        if let urlStr = avatarToDisplay, let url = URL(string: urlStr) {
+                            KFImage(url)
+                                .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 340)
+                                .clipped()
+                                .onTapGesture { showZoomedImage = true }
+                                .id(urlStr)
+                        } else {
+                            // Empty State / Generate Button
+                            Button(action: { generateAvatar() }) {
+                                VStack(spacing: 15) {
+                                    Image(systemName: "sparkles.rectangle.stack").font(.system(size: 50, weight: .light)).foregroundColor(.luxeEcru)
+                                    Text("TAP TO GENERATE AVATAR").font(.headline).foregroundColor(.luxeFlax)
+                                }
+                                .frame(maxWidth: .infinity).frame(height: 350)
                             }
-                            .frame(maxWidth: .infinity).frame(height: 350)
                         }
                     }
                 }
