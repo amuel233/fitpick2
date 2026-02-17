@@ -72,7 +72,7 @@ enum ClothingCategory: String, CaseIterable, Codable, Identifiable {
         case .bottom:
             // Use your Custom Asset name here if you added it,
             // otherwise use the safe system symbol:
-            return "rectangle.portrait.bottomhalf.filled"
+            return "icon-pants"
             // return "icon-pants" // <-- Use this if you added the SVG asset
         case .shoes:
             return "shoe"

@@ -8,6 +8,9 @@ class BodyMeasurementViewModel: ObservableObject {
     @Published var isGenerating: Bool = false
     @Published var generatedImage: UIImage? = nil
     
+    // ✅ ADDED THIS PROPERTY TO FIX THE ERROR
+    @Published var userAvatarURL: String? = nil
+    
     // --- NEW VALIDATION STATES ---
     @Published var usernameError: String? = nil
     @Published var isCheckingUsername: Bool = false
