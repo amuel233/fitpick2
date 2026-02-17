@@ -69,7 +69,7 @@ class ClosetViewModel: ObservableObject {
     private var historyListener: ListenerRegistration?
     
     // AI Model
-    private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-2.5-flash-image")
+    private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-3-pro-image-preview")
 
     //Avatar Listener for closetHeaderView
     @Published var userAvatarURL: String? = nil
