@@ -10,29 +10,6 @@ import PhotosUI
 import Kingfisher
 import FirebaseAuth
 
-// MARK: - LUXE THEME COLORS
-extension Color {
-    static let luxeRichCharcoal = Color(hex: "1C1C1E")
-    static let luxeDeepOnyx = Color(hex: "080808")
-    static let luxeEcru = Color(hex: "D0AC77")
-    static let luxeFlax = Color(hex: "EBD58D")
-    static let luxeBeige = Color(hex: "FFFEE5")
-    
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default: (a, r, g, b) = (1, 1, 1, 0)
-        }
-        self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
-    }
-}
-
 struct ClosetView: View {
     // MARK: - Properties
     var targetUserEmail: String?
@@ -76,10 +53,7 @@ struct ClosetView: View {
                 
                 // MARK: - LAYER 0: LUXE STUDIO BACKGROUND
                 ZStack {
-                    RadialGradient(
-                        gradient: Gradient(colors: [.luxeRichCharcoal, .luxeDeepOnyx, .black]),
-                        center: .top, startRadius: 0, endRadius: screenHeight * 0.8
-                    ).ignoresSafeArea()
+                    Color.luxeSpotlightGradient.ignoresSafeArea() // ✅ Uses shared gradient
                     
                     // Ambient Glows
                     GeometryReader { geo in
@@ -116,7 +90,7 @@ struct ClosetView: View {
                         // --- GLASS HEADER ---
                         VStack(spacing: 0) {
                             // 1. Handle
-                            Capsule().fill(LinearGradient(colors: [.luxeEcru, .luxeFlax], startPoint: .leading, endPoint: .trailing))
+                            Capsule().fill(Color.luxeGoldGradient) // ✅ Uses shared gradient
                                 .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
                             
                             // 2. Actions
@@ -150,7 +124,6 @@ struct ClosetView: View {
                     .overlay(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]).stroke(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.5), radius: 30, x: 0, y: -10)
                     .offset(y: (screenHeight * position.offsetMultiplier) + dragOffset)
-                    // ✅ KEY FIX: Only allow touches on the drawer itself, not the empty space above it
                     .allowsHitTesting(true)
                     .gesture(
                         DragGesture()
@@ -173,8 +146,6 @@ struct ClosetView: View {
                     )
                 }
                 .edgesIgnoringSafeArea(.bottom)
-                // ✅ KEY FIX: The container should not block touches, but the content (VStack) should catch them.
-                // Since GeometryReader fills the screen, we rely on the logic above.
                 .allowsHitTesting(true)
                 .zIndex(2)
                 
@@ -215,7 +186,9 @@ struct ClosetActionButtons: View {
                     }
                 }
                 .font(.system(size: 16, weight: .bold, design: .serif)).foregroundColor(.black).frame(height: 54).frame(maxWidth: .infinity)
-                .background(LinearGradient(colors: selectedItemIDs.isEmpty ? [Color(white: 0.2)] : [.luxeEcru, .luxeFlax, .luxeEcru], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .background(
+                    LinearGradient(colors: selectedItemIDs.isEmpty ? [Color(white: 0.2)] : [.luxeEcru, .luxeFlax, .luxeEcru], startPoint: .topLeading, endPoint: .bottomTrailing) // ✅ Uses shared colors
+                )
                 .cornerRadius(16).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.2), lineWidth: 1))
                 .shadow(color: selectedItemIDs.isEmpty ? .clear : .luxeEcru.opacity(0.4), radius: 10, x: 0, y: 5)
             }.disabled(selectedItemIDs.isEmpty || viewModel.isGeneratingTryOn)
@@ -243,7 +216,7 @@ struct ClosetFilterView: View {
         }
     }
     func iconForCategory(_ category: ClothingCategory) -> Image {
-        switch category { case .top: return Image(systemName: "tshirt"); case .bottom: return Image("icon-pants"); case .shoes: return Image(systemName: "shoe"); case .accessories: return Image(systemName: "sunglasses.fill") }
+        switch category { case .top: return Image(systemName: "tshirt"); case .bottom: return Image("pants"); case .shoes: return Image(systemName: "shoe"); case .accessories: return Image(systemName: "sunglasses.fill") }
     }
 }
 
@@ -276,7 +249,7 @@ struct InventoryItemCard: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             CachedImageView(urlString: item.remoteURL).frame(minWidth: 0, maxWidth: .infinity).frame(height: 150).clipped().overlay(Color.black.opacity(isSelected ? 0.4 : 0)).clipShape(RoundedRectangle(cornerRadius: 16)).contentShape(Rectangle()).onTapGesture(perform: onTap).onLongPressGesture(perform: onLongPress)
-            if isSelected { RoundedRectangle(cornerRadius: 16).stroke(LinearGradient(colors: [.luxeEcru, .luxeFlax], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 2).frame(height: 150); Image(systemName: "checkmark.circle.fill").foregroundColor(.luxeFlax).background(Circle().fill(.black)).padding(6) }
+            if isSelected { RoundedRectangle(cornerRadius: 16).stroke(Color.luxeGoldGradient, lineWidth: 2).frame(height: 150); Image(systemName: "checkmark.circle.fill").foregroundColor(.luxeFlax).background(Circle().fill(.black)).padding(6) }
             if isOwner && !isSelected { Button(action: onDelete) { Image(systemName: "xmark").font(.caption2.bold()).foregroundColor(.white.opacity(0.7)).padding(6).background(.ultraThinMaterial).clipShape(Circle()) }.padding(6).frame(maxWidth: .infinity, maxHeight: 150, alignment: .bottomTrailing) }
         }.overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
     }
@@ -290,7 +263,10 @@ struct ZoomOverlayView: View {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).ignoresSafeArea().onTapGesture(perform: onDismiss)
             VStack(spacing: 25) {
                 CachedImageView(urlString: item.remoteURL).scaledToFit().clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.5), radius: 30).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).padding()
-                VStack(spacing: 8) { Text(item.subCategory.uppercased()).font(.title2).fontWeight(.bold).foregroundColor(.luxeFlax).tracking(2); if !item.size.isEmpty { Text("SIZE \(item.size)").font(.subheadline).foregroundColor(.luxeBeige).padding(.horizontal, 12).padding(.vertical, 6).background(.ultraThinMaterial).cornerRadius(8) } }
+                VStack(spacing: 8) {
+                    Text(item.subCategory.uppercased()).font(.title2).fontWeight(.bold).foregroundColor(.luxeFlax).tracking(2)
+                    if !item.size.isEmpty { Text("SIZE \(item.size)").font(.subheadline).foregroundColor(.luxeBeige).padding(.horizontal, 12).padding(.vertical, 6).background(.ultraThinMaterial).cornerRadius(8) }
+                }
             }
             VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer() }
         }
@@ -303,7 +279,7 @@ struct HistorySheetView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.luxeRichCharcoal.ignoresSafeArea()
+                Color.luxeRichCharcoal.ignoresSafeArea() // ✅ Uses shared color
                 ScrollView {
                     if viewModel.savedLooks.isEmpty { VStack(spacing: 20) { Image(systemName: "photo.stack").font(.system(size: 50)).foregroundColor(.luxeEcru.opacity(0.6)); Text("No saved looks").font(.headline).foregroundColor(.luxeBeige) }.padding(.top, 100) }
                     else { LazyVGrid(columns: columns, spacing: 12) { ForEach(viewModel.savedLooks) { look in ZStack(alignment: .topTrailing) { KFImage(URL(string: look.imageURL)).resizable().scaledToFill().frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1)).contentShape(Rectangle()).onTapGesture { selectedLook = look }; Menu { Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }; Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) } } label: { Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle()) }.padding(6) } } }.padding() }
@@ -322,7 +298,7 @@ struct HistoryZoomView: View {
         ZStack {
             Color.black.ignoresSafeArea().onTapGesture { onDismiss() }
             KFImage(URL(string: look.imageURL)).resizable().scaledToFit()
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer(); HStack(spacing: 16) { Button(action: { viewModel.deleteLook(look); onDismiss() }) { Image(systemName: "trash").font(.title3).foregroundColor(.white).frame(width: 70, height: 60).background(Color(white: 0.15)).cornerRadius(12) }; Button(action: { Task { await viewModel.restoreLook(look); onDismiss(); parentSheetPresented = false } }) { HStack { Image(systemName: "arrow.counterclockwise"); Text("Restore") }.bold().foregroundColor(.black).frame(maxWidth: .infinity).frame(height: 60).background(LinearGradient(colors: [.luxeEcru, .luxeFlax], startPoint: .leading, endPoint: .trailing)).cornerRadius(12) } }.padding(.horizontal, 20).padding(.bottom, 50) }
+            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer(); HStack(spacing: 16) { Button(action: { viewModel.deleteLook(look); onDismiss() }) { Image(systemName: "trash").font(.title3).foregroundColor(.white).frame(width: 70, height: 60).background(Color(white: 0.15)).cornerRadius(12) }; Button(action: { Task { await viewModel.restoreLook(look); onDismiss(); parentSheetPresented = false } }) { HStack { Image(systemName: "arrow.counterclockwise"); Text("Restore") }.bold().foregroundColor(.black).frame(maxWidth: .infinity).frame(height: 60).background(Color.luxeGoldGradient).cornerRadius(12) } }.padding(.horizontal, 20).padding(.bottom, 50) }
         }
     }
 }
