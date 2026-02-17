@@ -44,8 +44,8 @@ struct ClosetView: View {
         var offsetMultiplier: CGFloat {
             switch self {
             case .top: return 0.12
-            case .middle: return 0.40 // Updated from 0.48
-            case .bottom: return 0.65 // Added new position
+            case .middle: return 0.40
+            case .bottom: return 0.65
             }
         }
     }
@@ -57,8 +57,6 @@ struct ClosetView: View {
                 // MARK: - LAYER 0: LUXE STUDIO BACKGROUND
                 ZStack {
                     Color.luxeSpotlightGradient.ignoresSafeArea()
-                    
-                    // Ambient Glows
                     GeometryReader { geo in
                         ZStack {
                             Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
@@ -86,92 +84,92 @@ struct ClosetView: View {
                 }
                 .zIndex(1)
                 
-            // MARK: - LAYER 2: ULTRA-LUXE GLASS DRAWER
-                            GeometryReader { geometry in
-                                VStack(spacing: 0) {
-                                    
-                                    // --- GLASS HEADER ---
-                                    VStack(spacing: 0) {
-                                        // 1. Handle
-                                        Capsule().fill(Color.luxeGoldGradient)
-                                            .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
-                                        
-                                        // 2. Actions
-                                        ClosetActionButtons(
-                                            viewModel: viewModel,
-                                            selectedItemIDs: viewModel.selectedItemIDs,
-                                            showCamera: $showCamera,
-                                            selectedPickerItems: $selectedPickerItems,
-                                            onTryOn: { withAnimation { position = .middle } },
-                                            isGuest: targetUserEmail != nil
-                                        ).padding(.bottom, 20)
-                                        
-                                        // 3. Filters
-                                        ClosetFilterView(selectedCategory: $viewModel.selectedCategory).padding(.bottom, 20)
-                                    }
-                                    .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
-                                    
-                                    // --- CONTENT ---
-                                    ScrollView {
-                                        InventoryGrid(
-                                            viewModel: viewModel,
-                                            itemToDelete: $itemToDelete,
-                                            showingDeleteAlert: $showingDeleteAlert,
-                                            zoomedItem: $zoomedItem,
-                                            isOwner: targetUserEmail == nil
-                                        )
-                                        // ✅ FIXED: Increased padding from 160 to 220
-                                        // This ensures the Delete button (at the bottom of the card) clears the Tab Bar
-                                        .padding(.bottom, 220)
-                                    }
-                                    .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                // MARK: - LAYER 2: ULTRA-LUXE GLASS DRAWER
+                GeometryReader { geometry in
+                    VStack(spacing: 0) {
+                        
+                        // --- GLASS HEADER ---
+                        VStack(spacing: 0) {
+                            // 1. Handle
+                            Capsule().fill(Color.luxeGoldGradient)
+                                .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
+                            
+                            // 2. Actions (Restored)
+                            ClosetActionButtons(
+                                viewModel: viewModel,
+                                selectedItemIDs: viewModel.selectedItemIDs,
+                                showCamera: $showCamera,
+                                selectedPickerItems: $selectedPickerItems,
+                                onTryOn: { withAnimation { position = .middle } },
+                                isGuest: targetUserEmail != nil
+                            ).padding(.bottom, 20)
+                            
+                            // 3. Filters (Restored)
+                            ClosetFilterView(selectedCategory: $viewModel.selectedCategory).padding(.bottom, 20)
+                        }
+                        .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                        
+                        // --- CONTENT ---
+                        ScrollView {
+                            // Inventory Grid (Restored)
+                            InventoryGrid(
+                                viewModel: viewModel,
+                                itemToDelete: $itemToDelete,
+                                showingDeleteAlert: $showingDeleteAlert,
+                                zoomedItem: $zoomedItem,
+                                isOwner: targetUserEmail == nil
+                            )
+                            .padding(.bottom, 220)
+                        }
+                        .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                    }
+                    .clipShape(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]))
+                    .overlay(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]).stroke(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.5), radius: 30, x: 0, y: -10)
+                    .offset(y: (screenHeight * position.offsetMultiplier) + dragOffset)
+                    .allowsHitTesting(true)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                let translation = value.translation.height
+                                if position == .top && translation < 0 {
+                                    dragOffset = translation / 3
+                                } else if position == .bottom && translation > 0 {
+                                    dragOffset = translation / 3
+                                } else {
+                                    dragOffset = translation
                                 }
-                                .clipShape(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]))
-                                .overlay(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]).stroke(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.5))
-                                .shadow(color: .black.opacity(0.5), radius: 30, x: 0, y: -10)
-                                .offset(y: (screenHeight * position.offsetMultiplier) + dragOffset)
-                                .allowsHitTesting(true)
-                                .gesture(
-                                    DragGesture()
-                                        .onChanged { value in
-                                            let translation = value.translation.height
-                                            
-                                            // ✅ LOGIC: Add resistance when dragging past limits
-                                            if position == .top && translation < 0 {
-                                                dragOffset = translation / 3 // Resist pulling up
-                                            } else if position == .bottom && translation > 0 {
-                                                dragOffset = translation / 3 // Resist pulling down
-                                            } else {
-                                                dragOffset = translation
-                                            }
-                                        }
-                                        .onEnded { value in
-                                            let currentY = (screenHeight * position.offsetMultiplier) + value.translation.height + (value.predictedEndLocation.y - value.location.y) * 0.2
-                                            
-                                            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                                // ✅ LOGIC: Calculate distance to all 3 positions
-                                                let distTop = abs(currentY - (screenHeight * DrawerPosition.top.offsetMultiplier))
-                                                let distMid = abs(currentY - (screenHeight * DrawerPosition.middle.offsetMultiplier))
-                                                let distBot = abs(currentY - (screenHeight * DrawerPosition.bottom.offsetMultiplier))
-                                                
-                                                // Snap to closest
-                                                if distTop < distMid && distTop < distBot { position = .top }
-                                                else if distMid < distTop && distMid < distBot { position = .middle }
-                                                else { position = .bottom }
-                                                
-                                                dragOffset = 0
-                                            }
-                                        }
-                                )
                             }
-                            .edgesIgnoringSafeArea(.bottom)
-                            .allowsHitTesting(true)
-                            .zIndex(2)
+                            .onEnded { value in
+                                let currentY = (screenHeight * position.offsetMultiplier) + value.translation.height + (value.predictedEndLocation.y - value.location.y) * 0.2
+                                
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
+                                    let distTop = abs(currentY - (screenHeight * DrawerPosition.top.offsetMultiplier))
+                                    let distMid = abs(currentY - (screenHeight * DrawerPosition.middle.offsetMultiplier))
+                                    let distBot = abs(currentY - (screenHeight * DrawerPosition.bottom.offsetMultiplier))
+                                    
+                                    if distTop < distMid && distTop < distBot { position = .top }
+                                    else if distMid < distTop && distMid < distBot { position = .middle }
+                                    else { position = .bottom }
+                                    
+                                    dragOffset = 0
+                                }
+                            }
+                    )
+                }
+                .edgesIgnoringSafeArea(.bottom)
+                .allowsHitTesting(true)
+                .zIndex(2)
                 
                 // MARK: - LAYER 3: ZOOM OVERLAY
                 if let item = zoomedItem {
-                    ZoomOverlayView(item: item, onDismiss: { withAnimation { zoomedItem = nil } }, isOwner: targetUserEmail == nil)
-                        .zIndex(3).transition(.opacity)
+                    ZoomOverlayView(
+                        item: item,
+                        onDismiss: { withAnimation { zoomedItem = nil } },
+                        isOwner: targetUserEmail == nil,
+                        viewModel: viewModel
+                    )
+                    .zIndex(3).transition(.opacity)
                 }
             }
             .navigationBarHidden(true)
@@ -187,7 +185,7 @@ struct ClosetView: View {
     }
 }
 
-// MARK: - Action Buttons
+// MARK: - Action Buttons (RESTORED)
 struct ClosetActionButtons: View {
     @ObservedObject var viewModel: ClosetViewModel
     let selectedItemIDs: Set<String>
@@ -223,7 +221,7 @@ struct ClosetActionButtons: View {
 struct GlassIconButton: View { let icon: String; let action: () -> Void; var body: some View { Button(action: action) { GlassIconView(icon: icon) } } }
 struct GlassIconView: View { let icon: String; var body: some View { Image(systemName: icon).font(.title3).foregroundColor(.luxeBeige).frame(width: 54, height: 54).background(.ultraThinMaterial).environment(\.colorScheme, .dark).clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).shadow(color: .black.opacity(0.2), radius: 5) } }
 
-// MARK: - Filters
+// MARK: - Filters (RESTORED)
 struct ClosetFilterView: View {
     @Binding var selectedCategory: ClothingCategory?
     var body: some View {
@@ -250,7 +248,7 @@ struct FilterIcon: View {
     }
 }
 
-// MARK: - Grid
+// MARK: - Grid (RESTORED)
 struct InventoryGrid: View {
     @ObservedObject var viewModel: ClosetViewModel; @Binding var itemToDelete: ClothingItem?; @Binding var showingDeleteAlert: Bool; @Binding var zoomedItem: ClothingItem?; let isOwner: Bool
     let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
@@ -274,25 +272,157 @@ struct InventoryItemCard: View {
     }
 }
 
-// MARK: - Zoom Overlay
+// MARK: - Zoom Overlay (UPDATED WITH CATEGORY PICKER)
 struct ZoomOverlayView: View {
-    let item: ClothingItem; let onDismiss: () -> Void; let isOwner: Bool
+    let item: ClothingItem
+    let onDismiss: () -> Void
+    let isOwner: Bool
+    @ObservedObject var viewModel: ClosetViewModel
+    
+    // --- EDITING STATES ---
+    @State private var editedCategory: ClothingCategory
+    @State private var editedSubCategory: String
+    @State private var editedSize: String
+    @State private var isEditing: Bool = false
+    @State private var isSaving: Bool = false
+    
+    init(item: ClothingItem, onDismiss: @escaping () -> Void, isOwner: Bool, viewModel: ClosetViewModel) {
+        self.item = item
+        self.onDismiss = onDismiss
+        self.isOwner = isOwner
+        self.viewModel = viewModel
+        
+        // Initialize editing states from item data
+        _editedCategory = State(initialValue: item.category)
+        _editedSubCategory = State(initialValue: item.subCategory)
+        _editedSize = State(initialValue: item.size)
+    }
+
     var body: some View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).ignoresSafeArea().onTapGesture(perform: onDismiss)
+            
             VStack(spacing: 25) {
-                CachedImageView(urlString: item.remoteURL).scaledToFit().clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.5), radius: 30).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).padding()
-                VStack(spacing: 8) {
-                    Text(item.subCategory.uppercased()).font(.title2).fontWeight(.bold).foregroundColor(.luxeFlax).tracking(2)
-                    if !item.size.isEmpty { Text("SIZE \(item.size)").font(.subheadline).foregroundColor(.luxeBeige).padding(.horizontal, 12).padding(.vertical, 6).background(.ultraThinMaterial).cornerRadius(8) }
+                // 1. Zoomed Image
+                CachedImageView(urlString: item.remoteURL)
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .shadow(color: .black.opacity(0.5), radius: 30)
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+                    .padding()
+                
+                // 2. Info / Edit Section
+                VStack(spacing: 12) {
+                    if isEditing {
+                        // --- EDIT MODE ---
+                        VStack(spacing: 15) {
+                            // ✅ Category Picker
+                            Picker("Category", selection: $editedCategory) {
+                                ForEach(ClothingCategory.allCases) { category in
+                                    Text(category.rawValue).tag(category)
+                                }
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .onAppear {
+                                // Enforce light appearance for readability on dark glass
+                                UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(Color.luxeFlax)
+                                UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.black], for: .selected)
+                                UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.white], for: .normal)
+                            }
+
+                            // Subcategory Field
+                            TextField("Subcategory (e.g. Blouse)", text: $editedSubCategory)
+                                .textFieldStyle(GlassTextFieldStyle())
+                                .multilineTextAlignment(.center)
+                            
+                            // Size Field
+                            TextField("Size (e.g. M)", text: $editedSize)
+                                .textFieldStyle(GlassTextFieldStyle())
+                                .frame(width: 120)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal)
+                        
+                        // Actions
+                        HStack(spacing: 20) {
+                            Button(action: { withAnimation { isEditing = false } }) {
+                                Image(systemName: "xmark").font(.title3).foregroundColor(.white.opacity(0.7))
+                            }
+                            Button(action: saveChanges) {
+                                if isSaving { ProgressView().tint(.luxeFlax) }
+                                else {
+                                    Image(systemName: "checkmark").font(.title3).foregroundColor(.luxeFlax)
+                                        .padding(8).background(Color.white.opacity(0.1)).clipShape(Circle())
+                                }
+                            }
+                        }.padding(.top, 5)
+                        
+                    } else {
+                        // --- DISPLAY MODE ---
+                        VStack(spacing: 5) {
+                            // ✅ Display Category
+                            Text(item.category.rawValue.uppercased())
+                                .font(.caption).bold()
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.bottom, 2)
+                                
+                            Text(item.subCategory.uppercased())
+                                .font(.title2).fontWeight(.bold)
+                                .foregroundColor(.luxeFlax).tracking(2)
+                            
+                            if !item.size.isEmpty {
+                                Text("SIZE \(item.size)")
+                                    .font(.subheadline).foregroundColor(.luxeBeige)
+                                    .padding(.horizontal, 12).padding(.vertical, 6)
+                                    .background(.ultraThinMaterial).cornerRadius(8)
+                            }
+                        }
+                        
+                        if isOwner {
+                            Button(action: {
+                                editedCategory = item.category
+                                editedSubCategory = item.subCategory
+                                editedSize = item.size
+                                withAnimation { isEditing = true }
+                            }) {
+                                HStack(spacing: 6) { Image(systemName: "pencil"); Text("Edit") }
+                                .font(.caption).foregroundColor(.white.opacity(0.5)).padding(.top, 5)
+                            }
+                        }
+                    }
                 }
             }
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer() }
+            
+            VStack {
+                HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }
+                Spacer()
+            }
+        }
+    }
+    
+    // --- ViewModel Action ---
+    func saveChanges() {
+        isSaving = true
+        Task {
+            // ✅ Calls ViewModel with new Category
+            await viewModel.updateItemDetails(
+                item: item,
+                newCategory: editedCategory,
+                newSubCategory: editedSubCategory,
+                newSize: editedSize
+            )
+            
+            await MainActor.run {
+                withAnimation {
+                    isEditing = false
+                    isSaving = false
+                }
+            }
         }
     }
 }
 
-// MARK: - History Views
+// MARK: - History Views (RESTORED)
 struct HistorySheetView: View {
     @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?; let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     var body: some View {
@@ -322,5 +452,13 @@ struct HistoryZoomView: View {
     }
 }
 
+// MARK: - Helper Views & Shapes (RESTORED)
 struct RoundedCorner: Shape { var radius: CGFloat = .infinity; var corners: UIRectCorner = .allCorners; func path(in rect: CGRect) -> Path { let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius)); return Path(path.cgPath) } }
 extension View { func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View { clipShape(RoundedCorner(radius: radius, corners: corners)) } }
+
+struct GlassTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration.padding(10).background(Color.white.opacity(0.1)).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.2), lineWidth: 1)).foregroundColor(.white)
+    }
+}

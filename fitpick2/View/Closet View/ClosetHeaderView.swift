@@ -208,8 +208,9 @@ struct CircleButton: View {
     let bgColor: Color
     var isLoading: Bool = false
     
+    // ... (Retained existing styling)
     var body: some View {
-        Circle()
+        Circle() // ... (Retained)
             .fill(bgColor)
             .frame(width: 40, height: 40)
             .background(.ultraThinMaterial)
@@ -232,6 +233,7 @@ struct CircleButton: View {
     }
 }
 
+// MARK: - Zoom View with Pinch Gesture
 struct HeaderZoomView: View {
     let image: UIImage?
     let imageURL: String?
@@ -239,26 +241,100 @@ struct HeaderZoomView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea().onTapGesture(perform: onDismiss)
+            // Background tap to dismiss
+            Color.black.ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+                .zIndex(0)
             
-            if let img = image {
-                Image(uiImage: img).resizable().scaledToFit()
-            } else if let urlStr = imageURL, let url = URL(string: urlStr) {
-                KFImage(url).resizable().scaledToFit()
+            // Zoomable Image Container
+            GeometryReader { proxy in
+                if let img = image {
+                    ZoomableScrollView {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                } else if let urlStr = imageURL, let url = URL(string: urlStr) {
+                    ZoomableScrollView {
+                        KFImage(url)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                    }
+                }
             }
+            .zIndex(1)
             
+            // Close Button Overlay
             VStack {
                 HStack {
                     Spacer()
                     Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .padding()
+                        Image(systemName: "xmark.circle.fill") // Made slightly bolder for visibility
+                            .font(.system(size: 30))
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding(.top, 50)
+                            .padding(.trailing, 20)
+                            .shadow(radius: 5)
                     }
                 }
                 Spacer()
             }
+            .zIndex(2)
+        }
+    }
+}
+
+// MARK: - UIScrollView Wrapper for Pinch Zoom
+struct ZoomableScrollView<Content: View>: UIViewRepresentable {
+    private var content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        // 1. Configure ScrollView for Zooming
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.maximumZoomScale = 5.0 // Allow 5x zoom
+        scrollView.minimumZoomScale = 1.0 // Reset to 1x
+        scrollView.bouncesZoom = true
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.backgroundColor = .clear
+
+        // 2. Embed SwiftUI View inside a UIHostingController
+        let hostedView = context.coordinator.hostingController.view!
+        hostedView.translatesAutoresizingMaskIntoConstraints = true
+        hostedView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hostedView.backgroundColor = .clear
+        scrollView.addSubview(hostedView)
+
+        return scrollView
+    }
+
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        // Update content if needed
+        context.coordinator.hostingController.rootView = content
+        uiView.setNeedsLayout()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(hostingController: UIHostingController(rootView: content))
+    }
+
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        var hostingController: UIHostingController<Content>
+
+        init(hostingController: UIHostingController<Content>) {
+            self.hostingController = hostingController
+        }
+
+        // Return the view to zoom
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            return hostingController.view
         }
     }
 }
