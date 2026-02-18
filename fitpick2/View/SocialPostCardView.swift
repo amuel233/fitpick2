@@ -276,7 +276,8 @@ struct SocialPostCardView: View {
     
     nonisolated func performGeneration(avatarImage: UIImage, postImage: UIImage) async -> UIImage? {
         let generativeModel = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(
-            modelName: "gemini-2.5-flash-image",
+//            modelName: "gemini-2.5-flash-image",
+            modelName: "gemini-3-pro-image-preview",
             generationConfig: GenerationConfig(responseModalities: [.text, .image])
         )
 
@@ -289,7 +290,7 @@ struct SocialPostCardView: View {
             Maintain the person's pose, face, and physical characteristics from Image 1, 
             but replace their current outfit with the outfit from Image 2. 
             The final result should be a high-quality, realistic photograph of the person from Image 1 wearing the outfit of Image 2.
-            Keep the final output in the center of the image.
+            Keep the final image output in the center and maximize as needed.
             """
         ]
 
