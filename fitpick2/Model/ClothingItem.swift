@@ -11,34 +11,89 @@ import FirebaseFirestore
 // MARK: - 1. Core Data Model
 struct ClothingItem: Identifiable, Codable {
     let id: String
-    // Note: We keep 'remoteURL' as the source of truth for the image.
-    // 'uiImage' is only for local previews before upload.
     let remoteURL: String
-    
     let category: ClothingCategory
     let subCategory: String
-    var size: String = "" // Added support for size
+    var size: String = ""
     
-    // CodingKeys allows us to map JSON keys if they differ from variable names
-    // (Optional, but good practice for Firestore)
+    // ✅ FIX 1: Added missing fields (Fixes "Extra arguments" error)
+    var ownerEmail: String
+    var dateAdded: Date
+    
+    // CodingKeys map JSON keys if they differ from variable names
     enum CodingKeys: String, CodingKey {
         case id
         case remoteURL
         case category
         case subCategory
         case size
+        case ownerEmail
+        case dateAdded = "createdat" // ✅ Maps Firestore 'createdat' to Swift 'dateAdded'
+    }
+    
+    // ✅ FIX 2: Custom Decoder to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.id = try container.decode(String.self, forKey: .id)
+        self.remoteURL = try container.decode(String.self, forKey: .remoteURL)
+        
+        // Safe Category Decoding
+        if let catString = try? container.decode(String.self, forKey: .category),
+           let cat = ClothingCategory(rawValue: catString) {
+            self.category = cat
+        } else {
+            self.category = .top // Default fallback
+        }
+        
+        self.subCategory = try container.decodeIfPresent(String.self, forKey: .subCategory) ?? "Clothing"
+        self.size = try container.decodeIfPresent(String.self, forKey: .size) ?? ""
+        self.ownerEmail = try container.decodeIfPresent(String.self, forKey: .ownerEmail) ?? ""
+        
+        // Handle Date (createdat)
+        if let date = try? container.decodeIfPresent(Date.self, forKey: .dateAdded) {
+            self.dateAdded = date
+        } else {
+            self.dateAdded = Date() // Default to now if missing
+        }
+    }
+    
+    // Memberwise Initializer
+    init(id: String, remoteURL: String, category: ClothingCategory, subCategory: String, size: String, ownerEmail: String, dateAdded: Date) {
+        self.id = id
+        self.remoteURL = remoteURL
+        self.category = category
+        self.subCategory = subCategory
+        self.size = size
+        self.ownerEmail = ownerEmail
+        self.dateAdded = dateAdded
     }
 }
 
-// MARK: - 2. AI Helper Models
+// MARK: - 2. Saved Look Model
+// ✅ FIX 3: Added here to prevent "Invalid Redeclaration" errors
+struct SavedLook: Identifiable, Codable {
+    let id: String
+    let imageURL: String
+    let date: Date
+    let itemsUsed: [String]
+    
+    // Optional: Computed property for formatting date
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}
+
+// MARK: - 3. AI Helper Models
 struct AICategorization: Codable {
     let category: String
     let subcategory: String
     let size: String
 }
 
-// MARK: - 3. Bulk Upload Draft Model
-// Moved here from BulkAddItemViewModel so all models are together.
+// MARK: - 4. Bulk Upload Draft Model
 struct DraftItem: Identifiable {
     let id = UUID()
     let image: UIImage
@@ -54,7 +109,7 @@ struct DraftItem: Identifiable {
     var validationMessage: String = "Checking..."
 }
 
-// MARK: - 4. Centralized Category Logic
+// MARK: - 5. Centralized Category Logic
 enum ClothingCategory: String, CaseIterable, Codable, Identifiable {
     case top = "Top"
     case bottom = "Bottom"
@@ -63,21 +118,16 @@ enum ClothingCategory: String, CaseIterable, Codable, Identifiable {
     
     var id: String { self.rawValue }
     
-    // FIXED: Centralized Icon Logic
-    // Now you can just use `category.icon` anywhere in the app!
     var icon: String {
         switch self {
         case .top:
-            return "tshirt"
+            return "tshirt" // Ensure "tshirt" exists in Assets or use "tshirt.fill" (SF Symbol)
         case .bottom:
-            // Use your Custom Asset name here if you added it,
-            // otherwise use the safe system symbol:
-            return "icon-pants"
-            // return "icon-pants" // <-- Use this if you added the SVG asset
+            return "icon-pants" // Ensure "icon-pants" exists in Assets
         case .shoes:
-            return "shoe"
+            return "shoe" // Ensure "shoe" exists or use "shoe.fill" (SF Symbol)
         case .accessories:
-            return "bag"
+            return "bag" // Ensure "bag" exists or use "bag.fill" (SF Symbol)
         }
     }
 }

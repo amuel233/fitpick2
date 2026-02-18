@@ -39,11 +39,13 @@ struct ClosetView: View {
     }
     
     enum DrawerPosition {
-        case top, middle
+        case top, middle, bottom
+        
         var offsetMultiplier: CGFloat {
             switch self {
             case .top: return 0.12
-            case .middle: return 0.48
+            case .middle: return 0.40
+            case .bottom: return 0.65
             }
         }
     }
@@ -54,9 +56,7 @@ struct ClosetView: View {
                 
                 // MARK: - LAYER 0: LUXE STUDIO BACKGROUND
                 ZStack {
-                    Color.luxeSpotlightGradient.ignoresSafeArea() // ✅ Uses shared gradient
-                    
-                    // Ambient Glows
+                    Color.luxeSpotlightGradient.ignoresSafeArea()
                     GeometryReader { geo in
                         ZStack {
                             Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
@@ -91,7 +91,7 @@ struct ClosetView: View {
                         // --- GLASS HEADER ---
                         VStack(spacing: 0) {
                             // 1. Handle
-                            Capsule().fill(Color.luxeGoldGradient) // ✅ Uses shared gradient
+                            Capsule().fill(Color.luxeGoldGradient)
                                 .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
                             
                             // 2. Actions
@@ -117,7 +117,8 @@ struct ClosetView: View {
                                 showingDeleteAlert: $showingDeleteAlert,
                                 zoomedItem: $zoomedItem,
                                 isOwner: targetUserEmail == nil
-                            ).padding(.bottom, 100)
+                            )
+                            .padding(.bottom, 220)
                         }
                         .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
                     }
@@ -130,17 +131,26 @@ struct ClosetView: View {
                         DragGesture()
                             .onChanged { value in
                                 let translation = value.translation.height
-                                if position == .middle && translation > 0 { dragOffset = translation / 3 } else { dragOffset = translation }
+                                if position == .top && translation < 0 {
+                                    dragOffset = translation / 3
+                                } else if position == .bottom && translation > 0 {
+                                    dragOffset = translation / 3
+                                } else {
+                                    dragOffset = translation
+                                }
                             }
                             .onEnded { value in
-                                let predictedEnd = value.translation.height + (value.predictedEndLocation.y - value.location.y)
+                                let currentY = (screenHeight * position.offsetMultiplier) + value.translation.height + (value.predictedEndLocation.y - value.location.y) * 0.2
+                                
                                 withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                                    if predictedEnd < -100 { position = .top } else if predictedEnd > 100 { position = .middle }
-                                    else {
-                                        let distTop = abs((screenHeight * DrawerPosition.top.offsetMultiplier) - ((screenHeight * position.offsetMultiplier) + value.translation.height))
-                                        let distMid = abs((screenHeight * DrawerPosition.middle.offsetMultiplier) - ((screenHeight * position.offsetMultiplier) + value.translation.height))
-                                        position = distTop < distMid ? .top : .middle
-                                    }
+                                    let distTop = abs(currentY - (screenHeight * DrawerPosition.top.offsetMultiplier))
+                                    let distMid = abs(currentY - (screenHeight * DrawerPosition.middle.offsetMultiplier))
+                                    let distBot = abs(currentY - (screenHeight * DrawerPosition.bottom.offsetMultiplier))
+                                    
+                                    if distTop < distMid && distTop < distBot { position = .top }
+                                    else if distMid < distTop && distMid < distBot { position = .middle }
+                                    else { position = .bottom }
+                                    
                                     dragOffset = 0
                                 }
                             }
@@ -152,8 +162,13 @@ struct ClosetView: View {
                 
                 // MARK: - LAYER 3: ZOOM OVERLAY
                 if let item = zoomedItem {
-                    ZoomOverlayView(item: item, onDismiss: { withAnimation { zoomedItem = nil } }, isOwner: targetUserEmail == nil)
-                        .zIndex(3).transition(.opacity)
+                    ZoomOverlayView(
+                        item: item,
+                        onDismiss: { withAnimation { zoomedItem = nil } },
+                        isOwner: targetUserEmail == nil,
+                        viewModel: viewModel
+                    )
+                    .zIndex(3).transition(.opacity)
                 }
             }
             .navigationBarHidden(true)
@@ -188,7 +203,7 @@ struct ClosetActionButtons: View {
                 }
                 .font(.system(size: 16, weight: .bold, design: .serif)).foregroundColor(.black).frame(height: 54).frame(maxWidth: .infinity)
                 .background(
-                    LinearGradient(colors: selectedItemIDs.isEmpty ? [Color(white: 0.2)] : [.luxeEcru, .luxeFlax, .luxeEcru], startPoint: .topLeading, endPoint: .bottomTrailing) // ✅ Uses shared colors
+                    LinearGradient(colors: selectedItemIDs.isEmpty ? [Color(white: 0.2)] : [.luxeEcru, .luxeFlax, .luxeEcru], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
                 .cornerRadius(16).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.2), lineWidth: 1))
                 .shadow(color: selectedItemIDs.isEmpty ? .clear : .luxeEcru.opacity(0.4), radius: 10, x: 0, y: 5)
@@ -232,10 +247,18 @@ struct FilterIcon: View {
     }
 }
 
-// MARK: - Grid
+// MARK: - Grid (FIXED DIMENSIONS)
 struct InventoryGrid: View {
     @ObservedObject var viewModel: ClosetViewModel; @Binding var itemToDelete: ClothingItem?; @Binding var showingDeleteAlert: Bool; @Binding var zoomedItem: ClothingItem?; let isOwner: Bool
-    let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    
+    // ✅ FIX: Reverted to 3 Flexible columns.
+    // This guarantees 3 uniform columns on Pro Max, fixing "broken dimensions".
+    let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
+    
     var body: some View {
         LazyVGrid(columns: columns, spacing: 12) {
             let items = viewModel.filteredItems
@@ -258,32 +281,179 @@ struct InventoryItemCard: View {
 
 // MARK: - Zoom Overlay
 struct ZoomOverlayView: View {
-    let item: ClothingItem; let onDismiss: () -> Void; let isOwner: Bool
+    let item: ClothingItem
+    let onDismiss: () -> Void
+    let isOwner: Bool
+    @ObservedObject var viewModel: ClosetViewModel
+    
+    @State private var editedCategory: ClothingCategory
+    @State private var editedSubCategory: String
+    @State private var editedSize: String
+    @State private var isEditing: Bool = false
+    @State private var isSaving: Bool = false
+    
+    init(item: ClothingItem, onDismiss: @escaping () -> Void, isOwner: Bool, viewModel: ClosetViewModel) {
+        self.item = item
+        self.onDismiss = onDismiss
+        self.isOwner = isOwner
+        self.viewModel = viewModel
+        _editedCategory = State(initialValue: item.category)
+        _editedSubCategory = State(initialValue: item.subCategory)
+        _editedSize = State(initialValue: item.size)
+    }
+
     var body: some View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).ignoresSafeArea().onTapGesture(perform: onDismiss)
+            
             VStack(spacing: 25) {
-                CachedImageView(urlString: item.remoteURL).scaledToFit().clipShape(RoundedRectangle(cornerRadius: 20)).shadow(color: .black.opacity(0.5), radius: 30).overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).padding()
-                VStack(spacing: 8) {
-                    Text(item.subCategory.uppercased()).font(.title2).fontWeight(.bold).foregroundColor(.luxeFlax).tracking(2)
-                    if !item.size.isEmpty { Text("SIZE \(item.size)").font(.subheadline).foregroundColor(.luxeBeige).padding(.horizontal, 12).padding(.vertical, 6).background(.ultraThinMaterial).cornerRadius(8) }
+                // 1. Zoomed Image
+                CachedImageView(urlString: item.remoteURL)
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .shadow(color: .black.opacity(0.5), radius: 30)
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+                    .padding()
+                
+                // 2. Info / Edit Section
+                VStack(spacing: 12) {
+                    if isEditing {
+                        VStack(spacing: 15) {
+                            Picker("Category", selection: $editedCategory) {
+                                ForEach(ClothingCategory.allCases) { category in
+                                    Text(category.rawValue).tag(category)
+                                }
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .onAppear {
+                                UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(Color.luxeFlax)
+                                UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.black], for: .selected)
+                                UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.white], for: .normal)
+                            }
+
+                            TextField("Subcategory (e.g. Blouse)", text: $editedSubCategory)
+                                .textFieldStyle(GlassTextFieldStyle())
+                                .multilineTextAlignment(.center)
+                            
+                            TextField("Size (e.g. M)", text: $editedSize)
+                                .textFieldStyle(GlassTextFieldStyle())
+                                .frame(width: 120)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal)
+                        
+                        HStack(spacing: 20) {
+                            Button(action: { withAnimation { isEditing = false } }) {
+                                Image(systemName: "xmark").font(.title3).foregroundColor(.white.opacity(0.7))
+                            }
+                            Button(action: saveChanges) {
+                                if isSaving { ProgressView().tint(.luxeFlax) }
+                                else {
+                                    Image(systemName: "checkmark").font(.title3).foregroundColor(.luxeFlax)
+                                        .padding(8).background(Color.white.opacity(0.1)).clipShape(Circle())
+                                }
+                            }
+                        }.padding(.top, 5)
+                        
+                    } else {
+                        VStack(spacing: 5) {
+                            Text(item.category.rawValue.uppercased())
+                                .font(.caption).bold()
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.bottom, 2)
+                                
+                            Text(item.subCategory.uppercased())
+                                .font(.title2).fontWeight(.bold)
+                                .foregroundColor(.luxeFlax).tracking(2)
+                            
+                            if !item.size.isEmpty {
+                                Text("SIZE \(item.size)")
+                                    .font(.subheadline).foregroundColor(.luxeBeige)
+                                    .padding(.horizontal, 12).padding(.vertical, 6)
+                                    .background(.ultraThinMaterial).cornerRadius(8)
+                            }
+                        }
+                        
+                        if isOwner {
+                            Button(action: {
+                                editedCategory = item.category
+                                editedSubCategory = item.subCategory
+                                editedSize = item.size
+                                withAnimation { isEditing = true }
+                            }) {
+                                HStack(spacing: 6) { Image(systemName: "pencil"); Text("Edit") }
+                                .font(.caption).foregroundColor(.white.opacity(0.5)).padding(.top, 5)
+                            }
+                        }
+                    }
                 }
             }
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer() }
+            
+            VStack {
+                HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }
+                Spacer()
+            }
+        }
+    }
+    
+    func saveChanges() {
+        isSaving = true
+        Task {
+            await viewModel.updateItemDetails(
+                item: item,
+                newCategory: editedCategory,
+                newSubCategory: editedSubCategory,
+                newSize: editedSize
+            )
+            await MainActor.run {
+                withAnimation {
+                    isEditing = false
+                    isSaving = false
+                }
+            }
         }
     }
 }
 
 // MARK: - History Views
 struct HistorySheetView: View {
-    @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?; let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?
+    
+    // ✅ FIX: Changed to Adaptive with min 160.
+    // Result: 2 columns on small/medium phones (Fixes overlap).
+    // Result: 2-3 columns on Pro Max (Looks spaced out).
+    let columns = [
+        GridItem(.adaptive(minimum: 160), spacing: 15)
+    ]
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.luxeRichCharcoal.ignoresSafeArea() // ✅ Uses shared color
+                Color.luxeRichCharcoal.ignoresSafeArea()
                 ScrollView {
                     if viewModel.savedLooks.isEmpty { VStack(spacing: 20) { Image(systemName: "photo.stack").font(.system(size: 50)).foregroundColor(.luxeEcru.opacity(0.6)); Text("No saved looks").font(.headline).foregroundColor(.luxeBeige) }.padding(.top, 100) }
-                    else { LazyVGrid(columns: columns, spacing: 12) { ForEach(viewModel.savedLooks) { look in ZStack(alignment: .topTrailing) { KFImage(URL(string: look.imageURL)).resizable().scaledToFill().frame(height: 150).clipShape(RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1)).contentShape(Rectangle()).onTapGesture { selectedLook = look }; Menu { Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }; Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) } } label: { Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle()) }.padding(6) } } }.padding() }
+                    else {
+                        LazyVGrid(columns: columns, spacing: 15) {
+                            ForEach(viewModel.savedLooks) { look in
+                                ZStack(alignment: .topTrailing) {
+                                    KFImage(URL(string: look.imageURL))
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 180)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                                        .contentShape(Rectangle()).onTapGesture { selectedLook = look }
+                                    
+                                    Menu {
+                                        Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }
+                                        Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) }
+                                    } label: {
+                                        Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle())
+                                    }.padding(6)
+                                }
+                            }
+                        }.padding()
+                    }
                 }
             }
             .navigationTitle("Look History").navigationBarTitleDisplayMode(.inline).toolbarBackground(Color.luxeRichCharcoal, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
@@ -304,5 +474,13 @@ struct HistoryZoomView: View {
     }
 }
 
+// MARK: - Helper Views & Shapes
 struct RoundedCorner: Shape { var radius: CGFloat = .infinity; var corners: UIRectCorner = .allCorners; func path(in rect: CGRect) -> Path { let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius)); return Path(path.cgPath) } }
 extension View { func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View { clipShape(RoundedCorner(radius: radius, corners: corners)) } }
+
+struct GlassTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration.padding(10).background(Color.white.opacity(0.1)).cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.2), lineWidth: 1)).foregroundColor(.white)
+    }
+}
