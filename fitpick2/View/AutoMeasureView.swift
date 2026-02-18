@@ -27,7 +27,7 @@ struct AutoMeasureView: View {
     @EnvironmentObject var session: UserSession
     @Environment(\.dismiss) var dismiss // Add this line
     
-    @State private var countdown = 10
+    @State private var countdown = 5
     @State private var isTimerRunning = false
     @State private var timer: Timer? = nil
 
@@ -168,7 +168,7 @@ struct AutoMeasureView: View {
     
     func startCountdown() {
         isTimerRunning = true
-        countdown = 10
+        countdown = 5
         
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             if countdown > 1 {
@@ -191,7 +191,7 @@ struct AutoMeasureView: View {
     func resetCountdown() {
         if isTimerRunning {
             stopTimer()
-            countdown = 10
+            countdown = 5
         }
     }
 
