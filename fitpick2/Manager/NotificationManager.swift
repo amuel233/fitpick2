@@ -14,7 +14,6 @@ import FirebaseFirestore
 
 class NotificationManager: NSObject, MessagingDelegate, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
-    private let reminderService = WardrobeReminderService()
     
     func requestPermissions() {
         let center = UNUserNotificationCenter.current()
@@ -33,19 +32,18 @@ class NotificationManager: NSObject, MessagingDelegate, UNUserNotificationCenter
         guard let token = fcmToken else { return }
         print("✅ Firebase registration token is ready: \(token)")
         
-        // Save to Firestore
+        // Save to Firestore only if it's a new token
         saveTokenToUserDocument(token: token)
-        
-        // Run the smart check and notify the app to schedule the background task
-        reminderService.runReminderCheck { nextRun in
-            DispatchQueue.main.async {
-                // Safely call back to AppDelegate to schedule the next wake-up
-                (UIApplication.shared.delegate as? AppDelegate)?.scheduleAppRefresh(at: nextRun)
-            }
-        }
     }
     
     private func saveTokenToUserDocument(token: String) {
+        // Prevent redundant writes if the token hasn't changed
+        let lastToken = UserDefaults.standard.string(forKey: "lastSavedFCMToken")
+        guard token != lastToken else {
+            print("Token unchanged, skipping Firestore update.")
+            return
+        }
+
         guard let email = Auth.auth().currentUser?.email else { return }
         let db = Firestore.firestore()
         
@@ -55,6 +53,7 @@ class NotificationManager: NSObject, MessagingDelegate, UNUserNotificationCenter
             if let error = error {
                 print("Error saving FCM token: \(error.localizedDescription)")
             } else {
+                UserDefaults.standard.set(token, forKey: "lastSavedFCMToken")
                 print("FCM Token successfully saved for \(email)")
             }
         }
@@ -62,7 +61,6 @@ class NotificationManager: NSObject, MessagingDelegate, UNUserNotificationCenter
     
     func subscribeToWardrobeReminders() {
         guard !UserDefaults.standard.bool(forKey: "isSubscribedToWardrobe") else { return }
-        
         Messaging.messaging().subscribe(toTopic: "wardrobe_reminders") { error in
             if error == nil {
                 UserDefaults.standard.set(true, forKey: "isSubscribedToWardrobe")
@@ -73,7 +71,6 @@ class NotificationManager: NSObject, MessagingDelegate, UNUserNotificationCenter
 
     func unsubscribeFromWardrobeReminders() {
         guard UserDefaults.standard.bool(forKey: "isSubscribedToWardrobe") else { return }
-        
         Messaging.messaging().unsubscribe(fromTopic: "wardrobe_reminders") { error in
             if error == nil {
                 UserDefaults.standard.set(false, forKey: "isSubscribedToWardrobe")
