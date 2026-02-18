@@ -1,6 +1,6 @@
 //
-//  fitpickApp.swift
-//  fitpick
+//  fitpick2App.swift
+//  fitpick2
 //
 //  Created by Amuel Ryco Nidoy on 1/9/26.
 //
@@ -20,8 +20,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        
+        // NotificationManager handles the token logic
         Messaging.messaging().delegate = NotificationManager.shared
         
+        // Register the background task
         BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
             self.handleAppRefresh(task: task as! BGAppRefreshTask)
         }
@@ -32,15 +35,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
     }
 
+    /// Schedules the next background wardrobe check
     func scheduleAppRefresh(at date: Date? = nil) {
         let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
-        let minDelay = Date(timeIntervalSinceNow: 15 * 60)
+        let minDelay = Date(timeIntervalSinceNow: 15 * 60) // Minimum 15-minute window
         request.earliestBeginDate = date != nil ? max(date!, minDelay) : minDelay
         
-        // Create a formatter to show local time instead of UTC
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.timeZone = .current // This converts UTC to your local clock
+        formatter.timeZone = .current
         
         do {
             try BGTaskScheduler.shared.submit(request)
@@ -50,9 +53,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
 
+    /// Executed when the system wakes the app up in the background
     func handleAppRefresh(task: BGAppRefreshTask) {
         reminderService.runReminderCheck { nextRun in
-            self.scheduleAppRefresh(at: nextRun)
+            self.scheduleAppRefresh(at: nextRun) // Schedule the subsequent check
             task.setTaskCompleted(success: true)
         }
         task.expirationHandler = { task.setTaskCompleted(success: false) }
@@ -86,11 +90,12 @@ struct fitpick2App: App {
                     GIDSignIn.sharedInstance.handle(url)
                 }
                 .onChange(of: scenePhase) { oldPhase, newPhase in
+                    // Triggered when user leaves the app
                     if newPhase == .background {
                         delegate.scheduleAppRefresh()
                     }
+                    // Triggered when user opens the app
                     if newPhase == .active {
-                        // Log event count immediately when user returns
                         reminderService.runReminderCheck { _ in }
                     }
                 }
@@ -129,7 +134,6 @@ class UserSession: ObservableObject {
                 if let user = user {
                     self?.isLoggedIn = true
                     self?.email = user.email
-                    // This is the trigger that gets you past the LoginView
                     self?.appState?.isLoggedIn = true
                     self?.fetchFirestoreUsername(userId: user.email ?? "")
                 } else {
@@ -151,22 +155,16 @@ class UserSession: ObservableObject {
             if document.exists {
                 let data = document.data()
                 self.username = data?["username"] as? String ?? "User"
-
-                // Check for the new flag
                 let hasProfile = data?["hasProfile"] as? Bool ?? false
-
-                // Fallback: Check if they already have height data (exists for old users)
                 let measurements = data?["measurements"] as? [String: Any]
                 let hasExistingData = measurements?["height"] != nil
 
-                // ONLY redirect if BOTH are missing
                 if !hasProfile && !hasExistingData {
                     DispatchQueue.main.async {
                         self.appState?.selectedTab = 1
                     }
                 }
             } else {
-                // If the document doesn't even exist yet, they definitely need setup
                 DispatchQueue.main.async {
                     self.appState?.selectedTab = 1
                 }
