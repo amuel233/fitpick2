@@ -20,49 +20,49 @@ struct SmartWardrobePulse: View {
             HStack(spacing: 12) {
                 Image(systemName: "chart.pie.fill")
                     .font(.title2)
-                    .foregroundColor(.purple)
+                    .foregroundColor(.luxeFlax)
                 Text("Wardrobe Pulse")
                     .font(.headline.weight(.semibold))
+                    .foregroundColor(.luxeBeige)
             }
 
             if loading {
-                Text("Loading...")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                ProgressView().tint(.luxeFlax)
             } else if totalUploaded == 0 {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No clothes yet")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.luxeBeige.opacity(0.7))
 
                     Button(action: { appState.selectedTab = 2 }) {
                         Text("Start Uploading")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.luxeBlack)
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.luxeGoldGradient)
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color("fitPickGold"))
                 }
             } else {
                 let pct = Int(round((Double(usedCount) / Double(max(totalUploaded,1))) * 100.0))
-                Text("\(pct)% of items uploaded in the last 7 days were used.")
+                Text("\(pct)% of items used this week.")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.luxeBeige.opacity(0.8))
 
                 ProgressView(value: Double(usedCount), total: Double(max(totalUploaded,1)))
-                    .progressViewStyle(LinearProgressViewStyle(tint: Color.purple))
+                    .progressViewStyle(LinearProgressViewStyle(tint: Color.luxeFlax))
+                    .background(Color.luxeBeige.opacity(0.1))
+                    .cornerRadius(4)
             }
-
             Spacer()
         }
         .frame(minHeight: 140)
         .padding(Theme.cardPadding)
-        .background(.regularMaterial)
+        .background(Color.luxeRichCharcoal.opacity(0.8))
         .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1))
         .onAppear(perform: loadPulse)
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
-            loadPulse()
-        }
     }
 
     private func loadPulse() {

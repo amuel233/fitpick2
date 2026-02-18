@@ -4,6 +4,7 @@
 //
 //  Created by Shakira Mhaire on 1/19/26.
 //
+
 import SwiftUI
 
 struct TrendingFashionNews: View {
@@ -18,9 +19,10 @@ struct TrendingFashionNews: View {
             HStack(spacing: 12) {
                 Image(systemName: "star.fill")
                     .font(.title2)
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.luxeFlax) // Updated to Luxe Gold
                 Text("Trending in Fashion")
                     .font(.headline.weight(.semibold))
+                    .foregroundColor(.luxeBeige) // Updated to Luxe Beige
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
             }
@@ -28,68 +30,71 @@ struct TrendingFashionNews: View {
             if loading {
                 Text("Loading articles...")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.luxeBeige.opacity(0.6)) // Updated branding
                     .padding(.vertical, 8)
             } else if articles.isEmpty {
                 Text("No trending articles found.")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.luxeBeige.opacity(0.6)) // Updated branding
                     .padding(.vertical, 8)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
                         ForEach(articles) { a in
                             VStack(alignment: .leading, spacing: 8) {
-                                RoundedRectangle(cornerRadius: Theme.cornerRadius - 4)
-                                    .fill(LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.blue.opacity(0.08),
-                                            Color.purple.opacity(0.08)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 220, height: 110)
-                                    .overlay(
-                                        Image(systemName: "newspaper.fill")
-                                            .foregroundColor(.yellow)
-                                            .font(.title2)
-                                    )
-
                                 Text(a.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundColor(.luxeBeige) // Updated branding
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                
                                 Text(a.source)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(width: 220)
-                            .onTapGesture {
-                                if let url = URL(string: a.url) {
-                                    UIApplication.shared.open(url)
+                                    .font(.caption)
+                                    .foregroundColor(.luxeFlax) // Updated to accent color
+                                
+                                Button(action: {
+                                    if let url = URL(string: a.url) {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Text("Read More")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundColor(.luxeBlack)
+                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, 12)
+                                        .background(Color.luxeGoldGradient) // Updated branding
+                                        .cornerRadius(6)
                                 }
                             }
+                            .frame(width: 200, alignment: .leading)
+                            .padding(12)
+                            .background(Color.luxeRichCharcoal.opacity(0.5)) // Darker sub-card
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
+                            )
                         }
                     }
-                    .padding(.horizontal, 2)
                 }
             }
         }
         .padding(Theme.cardPadding)
-        .background(.regularMaterial)
+        .background(Color.luxeRichCharcoal.opacity(0.8)) // Main Luxe card background
         .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
+        )
         .onAppear(perform: loadArticles)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
             loadArticles()
         }
     }
 
+    // MARK: - Logic (Unaffected)
     private func loadArticles() {
         loading = true
-        // Use WeatherManager to reverse geocode locality if possible
         weather.requestLocation { res in
             switch res {
             case .success((let lat, let lon)):

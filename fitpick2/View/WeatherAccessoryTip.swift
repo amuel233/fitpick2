@@ -4,6 +4,7 @@
 //
 //  Created by Shakira Mhaire on 1/19/26.
 //
+
 import SwiftUI
 
 struct WeatherAccessoryTip: View {
@@ -18,20 +19,21 @@ struct WeatherAccessoryTip: View {
             HStack(spacing: 12) {
                 Image(systemName: iconName)
                     .font(.title2)
-                    .foregroundColor(.blue)
+                    .foregroundColor(.luxeFlax) // UI CHANGE: Blue -> Luxe Gold
                 Text("Weather Tip")
                     .font(.headline.weight(.semibold))
+                    .foregroundColor(.luxeBeige) // UI CHANGE: Default -> Luxe Beige
             }
 
             if loading {
                 Text(suggestion)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.luxeBeige.opacity(0.6)) // UI CHANGE: Secondary -> Muted Luxe
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text(suggestion)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.luxeBeige.opacity(0.8)) // UI CHANGE: Secondary -> Luxe Beige
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -39,15 +41,19 @@ struct WeatherAccessoryTip: View {
         }
         .frame(minHeight: 140)
         .padding(Theme.cardPadding)
-        .background(.regularMaterial)
+        .background(Color.luxeRichCharcoal.opacity(0.8)) // UI CHANGE: Material -> Luxe Charcoal
         .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
+        .overlay( // UI CHANGE: Shadow -> Luxe Stroke
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
+        )
         .onAppear(perform: loadTip)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
             loadTip()
         }
     }
 
+    // MARK: - Logic (UNAFFECTED)
     private func loadTip() {
         loading = true
         weather.requestLocation { res in
