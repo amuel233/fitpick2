@@ -21,7 +21,10 @@ struct BodyMeasurementView: View {
     @StateObject private var storageManager = StorageManager()
     
     @State private var focusedPart: String? = nil
-    let fitPickGold = Color("fitPickGold")
+    
+    // Luxe Theme alignment
+    let fitPickGold = Color.luxeEcru
+    let fitPickBlack = Color.luxeDeepOnyx
     
     var body: some View {
         NavigationStack {
@@ -29,28 +32,28 @@ struct BodyMeasurementView: View {
                 let screenHeight = geo.size.height
                 
                 ZStack {
-                    Color(.systemBackground).ignoresSafeArea()
+                    // Background: Spotlight Gradient
+                    Color.luxeSpotlightGradient.ignoresSafeArea()
                     
                     VStack(spacing: 0) {
                         // --- 1. USERNAME SECTION ---
                         VStack(alignment: .leading, spacing: 4) {
                             Text("USERNAME")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(Color.luxeFlax)
                             
                             TextField("Enter username", text: $viewModel.username)
                                 .padding(12)
-                                .background(Color(.secondarySystemBackground))
+                                .background(Color.luxeRichCharcoal.opacity(0.8))
                                 .cornerRadius(10)
-                                // --- UNIQUE VALIDATION UI ---
+                                .foregroundColor(.luxeBeige)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
-                                        .stroke(viewModel.usernameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                                        .stroke(viewModel.usernameError != nil ? Color.red : Color.luxeEcru.opacity(0.3), lineWidth: 1)
                                 )
                                 .disabled(!isEditing)
                                 .autocapitalization(.none)
                             
-                            // --- ERROR MESSAGE ---
                             if let error = viewModel.usernameError {
                                 Text(error)
                                     .font(.system(size: 10))
@@ -65,8 +68,8 @@ struct BodyMeasurementView: View {
                         
                         // --- 2. GENDER PICKER ---
                         Picker("Gender", selection: $viewModel.gender) {
-                            Text("Male").tag("Male")
-                            Text("Female").tag("Female")
+                            Text("Male").tag("Male_luxe_1")
+                            Text("Female").tag("Female_luxe_1")
                         }
                         .pickerStyle(.segmented)
                         .padding(.horizontal)
@@ -81,11 +84,12 @@ struct BodyMeasurementView: View {
                                 Text("Auto-Measure")
                             }
                             .font(.subheadline).bold()
-                            .foregroundColor(.white)
+                            .foregroundColor(.luxeBlack)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(isEditing ? fitPickGold : Color.gray.opacity(0.3))
+                            .background(isEditing ? Color.luxeGoldGradient : LinearGradient(colors: [Color.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
                             .cornerRadius(10)
+                            .shadow(color: isEditing ? Color.luxeEcru.opacity(0.3) : .clear, radius: 5)
                         }
                         .padding(.horizontal)
                         .disabled(!isEditing)
@@ -112,10 +116,10 @@ struct BodyMeasurementView: View {
                         Button(action: { if isEditing { showImagePicker = true } }) {
                             Label(selectedSelfie == nil ? "Take Selfie" : "Selfie Ready", systemImage: "camera.fill")
                                 .font(.subheadline).bold()
-                                .foregroundColor(isEditing ? (selectedSelfie == nil ? .primary : .green) : .secondary.opacity(0.5))
+                                .foregroundColor(isEditing ? (selectedSelfie == nil ? .luxeBeige : .green) : .luxeBeige.opacity(0.3))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
-                                .background(Color(.secondarySystemBackground))
+                                .background(Color.luxeRichCharcoal)
                                 .cornerRadius(12)
                         }
                         .padding(.horizontal)
@@ -127,30 +131,27 @@ struct BodyMeasurementView: View {
                         if isEditing {
                             Button(action: {
                                 Task {
-                                    // Run uniqueness check before saving
                                     if await viewModel.isUsernameUnique() {
                                         saveProfile()
-                                        showSaveSuccessAlert = true
+                                        withAnimation { showSaveSuccessAlert = true }
                                     }
                                 }
                             }) {
                                 Group {
                                     if viewModel.isCheckingUsername {
-                                        ProgressView().tint(.white)
+                                        ProgressView().tint(.luxeBlack)
                                     } else {
                                         Text("Save Changes")
-                                            .font(.headline).foregroundColor(.white)
+                                            .font(.headline).foregroundColor(.luxeBlack)
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                // Turn gray if empty
-                                .background(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray : Color.black)
+                                .background(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray : Color.luxeFlax)
                                 .cornerRadius(12)
                             }
                             .padding(.horizontal)
                             .padding(.bottom, 15)
-                            // Prevent click if empty or loading
                             .disabled(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isCheckingUsername)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         } else {
@@ -158,55 +159,61 @@ struct BodyMeasurementView: View {
                         }
                     }
                 }
+                // --- CUSTOM LUXE ALERTS ---
+                .luxeAlert(
+                    isPresented: $showCancelAlert,
+                    title: "DISCARD CHANGES?",
+                    message: "Are you sure you want to discard your unsaved changes?",
+                    confirmTitle: "DISCARD",
+                    cancelTitle: "KEEP EDITING"
+                ) {
+                    withAnimation {
+                        isEditing = false
+                        focusedPart = nil
+                        viewModel.fetchUserData()
+                        showCancelAlert = false
+                    }
+                }
+                .luxeAlert(
+                    isPresented: $showSaveSuccessAlert,
+                    title: "PROFILE UPDATED",
+                    message: "Your measurements and profile details have been saved successfully.",
+                    confirmTitle: "OK",
+                    cancelTitle: "" // Leaving this empty removes the extra button and centers "OK"
+                ) {
+                    withAnimation {
+                        isEditing = false
+                        showSaveSuccessAlert = false
+                    }
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if isEditing {
+                        // Minimalist Cancel Button in Luxe Palette
                         Button("Cancel") {
-                            showCancelAlert = true
+                            withAnimation { showCancelAlert = true }
                         }
                         .font(.subheadline).bold()
-                        .foregroundColor(.red)
-                        .id("cancel")
+                        .foregroundColor(.luxeBeige.opacity(0.7))
                     } else {
+                        // Clean Edit Profile Button (No background shape)
                         Button(action: {
                             withAnimation(.spring()) { isEditing = true }
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "pencil.circle.fill")
-                                    .foregroundColor(fitPickGold)
+                                    .foregroundColor(Color.luxeFlax)
                                 Text("Edit Profile")
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(.luxeBeige)
                             }
                             .font(.subheadline).bold()
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(fitPickGold.opacity(0.1))
-                            .cornerRadius(8)
                         }
-                        .id("edit")
                     }
                 }
             }
-            .alert("Discard Changes?", isPresented: $showCancelAlert) {
-                Button("Keep Editing", role: .cancel) { }
-                Button("Discard", role: .destructive) {
-                    withAnimation {
-                        isEditing = false
-                        focusedPart = nil
-                        viewModel.fetchUserData()
-                    }
-                }
-            } message: {
-                Text("Are you sure you want to discard your unsaved changes?")
-            }
-            .alert("Profile Updated", isPresented: $showSaveSuccessAlert) {
-                Button("OK") {
-                    withAnimation { isEditing = false }
-                }
-            } message: {
-                Text("Your measurements and profile details have been saved successfully.")
-            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .fullScreenCover(isPresented: $showAutoMeasure) {
                 AutoMeasureView { h, w, i, a, s, c, hi in
                     viewModel.height = h; viewModel.waist = w; viewModel.inseam = i
@@ -218,7 +225,12 @@ struct BodyMeasurementView: View {
                 FaceCaptureView(selectedImage: $selectedSelfie)
             }
         }
-        .onAppear { viewModel.fetchUserData() }
+        .onAppear {
+            viewModel.fetchUserData()
+            UISegmentedControl.appearance().selectedSegmentTintColor = UIColor(Color.luxeEcru)
+            UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor.black], for: .selected)
+            UISegmentedControl.appearance().setTitleTextAttributes([.foregroundColor: UIColor(Color.luxeBeige)], for: .normal)
+        }
     }
     
     @ViewBuilder
@@ -226,7 +238,7 @@ struct BodyMeasurementView: View {
         ZStack {
             Circle()
                 .fill(RadialGradient(
-                    gradient: Gradient(colors: [fitPickGold.opacity(0.12), .clear]),
+                    gradient: Gradient(colors: [Color.luxeEcru.opacity(0.12), .clear]),
                     center: .center,
                     startRadius: 20,
                     endRadius: 180
@@ -238,7 +250,7 @@ struct BodyMeasurementView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: screenHeight * 0.35)
-                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+                .shadow(color: Color.luxeEcru.opacity(0.15), radius: 10)
                 .overlay(
                     Group {
                         if let part = focusedPart {
@@ -305,6 +317,10 @@ struct BodyMeasurementView: View {
     }
 }
 
+
+
+
+
 // MARK: - Subcomponents
 struct MeasurementCallout: View {
     let label: String
@@ -314,6 +330,7 @@ struct MeasurementCallout: View {
     let isFocused: Bool
     let isLocked: Bool
     let toggleFocus: () -> Void
+    
     var body: some View {
         HStack(spacing: 4) {
             if alignment == .trailing {
@@ -322,7 +339,7 @@ struct MeasurementCallout: View {
             }
             VStack(alignment: alignment, spacing: 2) {
                 Text(label.uppercased()).font(.system(size: 8, weight: .black))
-                    .foregroundColor(isFocused ? Color("fitPickGold") : .secondary)
+                    .foregroundColor(isFocused ? Color.luxeFlax : Color.luxeBeige.opacity(0.5))
                 
                 Menu {
                     Picker(label, selection: $value) {
@@ -332,31 +349,34 @@ struct MeasurementCallout: View {
                     }
                 } label: {
                     Text("\(Int(value))\(unit)").font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundColor(isFocused ? Color("fitPickGold") : .primary)
+                        .foregroundColor(isFocused ? Color.luxeFlax : Color.luxeBeige)
                 }
                 .disabled(isLocked)
             }
             .padding(5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.05), radius: 2))
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.luxeRichCharcoal)
+                .shadow(color: isFocused ? Color.luxeEcru.opacity(0.3) : .black.opacity(0.2), radius: 2))
+            
             if alignment == .leading {
                 tooltipButton
                 guideLine
             }
         }
     }
+    
     private var tooltipButton: some View {
         Button(action: toggleFocus) {
             Image(systemName: isFocused ? "eye.fill" : "eye")
                 .font(.system(size: 8))
-                .foregroundColor(isFocused ? Color("fitPickGold") : .secondary)
+                .foregroundColor(isFocused ? Color.luxeFlax : Color.luxeBeige.opacity(0.4))
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(Color(.secondarySystemBackground)))
+                .background(Circle().fill(Color.luxeBlack))
         }
         .disabled(isLocked)
     }
+    
     private var guideLine: some View {
-        Rectangle().fill(isFocused ? Color("fitPickGold") : Color.gray.opacity(0.2))
+        Rectangle().fill(isFocused ? Color.luxeFlax : Color.luxeEcru.opacity(0.2))
             .frame(width: 10, height: 1)
     }
 }
@@ -376,65 +396,171 @@ struct StatBox: View {
             }
         } label: {
             HStack {
-                Image(systemName: icon).foregroundColor(Color("fitPickGold")).font(.system(size: 14))
+                Image(systemName: icon).foregroundColor(Color.luxeEcru).font(.system(size: 14))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(.secondary)
-                    Text("\(Int(value))\(unit)").font(.footnote).bold().foregroundColor(.primary)
+                    Text(label).font(.system(size: 8, weight: .bold)).foregroundColor(Color.luxeBeige.opacity(0.6))
+                    Text("\(Int(value))\(unit)").font(.footnote).bold().foregroundColor(Color.luxeBeige)
                 }
                 Spacer()
             }
-            .padding(10).background(Color(.secondarySystemBackground)).cornerRadius(10)
+            .padding(10).background(Color.luxeRichCharcoal).cornerRadius(10)
         }
     }
 }
+
 
 struct MeasurementGuide: View {
     let focusedPart: String
     let geo: GeometryProxy
     
+    // Proportional scaling
+    private var avatarHeight: CGFloat { geo.size.height * 0.35 }
+    private var avatarWidth: CGFloat { avatarHeight * 0.42 }
+    
+    private var centerX: CGFloat { geo.size.width / 2 }
+    private var centerY: CGFloat { geo.size.height / 2 }
+
     var body: some View {
-        let centerX = geo.size.width / 2
-        let avatarHeight = geo.size.height
-        
         ZStack {
             switch focusedPart {
             case "Height":
-                makeLine(from: CGPoint(x: centerX - 88, y: avatarHeight * 0.33),
-                         to: CGPoint(x: centerX - 88, y: avatarHeight * 0.025))
+                // Shifted further left (-45) and slightly UP
+                heightVerticalGuide()
+                
             case "Shoulder":
-                makeLine(from: CGPoint(x: centerX - 116, y: avatarHeight * 0.08),
-                         to: CGPoint(x: centerX - 57, y: avatarHeight * 0.08))
+                guideLine(yOffset: -avatarHeight * 0.32, width: avatarWidth * 0.55)
+                
             case "Chest":
-                makeLine(from: CGPoint(x: centerX - 105, y: avatarHeight * 0.1),
-                         to: CGPoint(x: centerX - 70, y: avatarHeight * 0.1))
+                guideLine(yOffset: -avatarHeight * 0.20, width: avatarWidth * 0.50)
+                
             case "Waist":
-                makeLine(from: CGPoint(x: centerX - 106, y: avatarHeight * 0.135),
-                         to: CGPoint(x: centerX - 67, y: avatarHeight * 0.135))
+                guideLine(yOffset: -avatarHeight * 0.04, width: avatarWidth * 0.45)
+                
             case "Hips":
-                makeLine(from: CGPoint(x: centerX - 108, y: avatarHeight * 0.17),
-                         to: CGPoint(x: centerX - 67, y: avatarHeight * 0.17))
+                guideLine(yOffset: avatarHeight * 0.08, width: avatarWidth * 0.55)
+                
             case "Arm":
-                makeLine(from: CGPoint(x: centerX - 110, y: avatarHeight * 0.08),
-                         to: CGPoint(x: centerX - 120, y: avatarHeight * 0.175))
+                // Shifted UP and to the LEFT
+                armPath()
+                
             case "Inseam":
-                makeLine(from: CGPoint(x: centerX - 95, y: avatarHeight * 0.2),
-                         to: CGPoint(x: centerX - 95, y: avatarHeight * 0.31))
-            default: EmptyView()
+                // Shifted UP and to the LEFT
+                inseamPath()
+                
+            default:
+                EmptyView()
             }
         }
     }
     
-    private func makeLine(from: CGPoint, to: CGPoint) -> some View {
-        DashedLineShape(from: from, to: to)
-            .stroke(Color("fitPickGold"), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [6, 4]))
-            .shadow(color: .black.opacity(0.1), radius: 1)
+    // --- Vertical Height Guide ---
+    @ViewBuilder
+    private func heightVerticalGuide() -> some View {
+        // Moved to -45 to clear the shoulder silhouette entirely
+        let heightX = centerX - 220
+        let topY = centerY - (avatarHeight * 1.4) // Higher top point
+        let bottomY = centerY - (avatarHeight * 0.42) // Slightly raised floor point
+        
+        ZStack {
+            Path { path in
+                path.move(to: CGPoint(x: heightX, y: topY))
+                path.addLine(to: CGPoint(x: heightX, y: bottomY))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            .foregroundColor(.luxeEcru)
+
+            // T-Bar Caps
+            Path { path in
+                path.move(to: CGPoint(x: heightX - 10, y: topY))
+                path.addLine(to: CGPoint(x: heightX + 10, y: topY))
+                path.move(to: CGPoint(x: heightX - 10, y: bottomY))
+                path.addLine(to: CGPoint(x: heightX + 10, y: bottomY))
+            }
+            .stroke(lineWidth: 2)
+            .foregroundColor(.luxeEcru)
+        }
+    }
+
+    // --- Arm Guide ---
+    @ViewBuilder
+        private func armPath() -> some View {
+            Path { path in
+                // Adjusted: start moved UP (multiplier -0.45) and further LEFT (multiplier 0.40)
+                let start = CGPoint(x: centerX - (avatarWidth * 1.8), y: centerY - (avatarHeight * 1.25))
+                // Adjusted: end moved UP (multiplier 0.05) and further LEFT (multiplier 0.65)
+                let end = CGPoint(x: centerX - (avatarWidth * 2), y: centerY - (avatarHeight * 0.95))
+                
+                path.move(to: start)
+                path.addLine(to: end)
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+            .foregroundColor(.luxeEcru)
+        }
+        
+        // --- Inseam Guide ---
+        @ViewBuilder
+        private func inseamPath() -> some View {
+            Path { path in
+                // Adjusted: start moved UP (multiplier -0.10) and further LEFT (multiplier 0.15)
+                let start = CGPoint(x: centerX - (avatarWidth * 1.3), y: centerY - (avatarHeight * 0.88))
+                // Adjusted: end moved UP (multiplier 0.35) and further LEFT (multiplier 0.22)
+                let end = CGPoint(x: centerX - (avatarWidth * 1.3), y: centerY - (avatarHeight * 0.5))
+                
+                path.move(to: start)
+                path.addLine(to: end)
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+            .foregroundColor(.luxeEcru)
+        }
+
+    @ViewBuilder
+    private func guideLine(yOffset: CGFloat, width: CGFloat) -> some View {
+        ZStack {
+            DashedLineShape()
+                .stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                .foregroundColor(.luxeEcru.opacity(0.9))
+                .frame(width: width, height: 1)
+            
+            HStack {
+                Circle().fill(Color.luxeEcru).frame(width: 3, height: 3)
+                Spacer()
+                Circle().fill(Color.luxeEcru).frame(width: 3, height: 3)
+            }
+            .frame(width: width)
+        }
+        .offset(y: yOffset)
+    }
+
+    
+    // Vertical/Angled measurement for Arm
+    @ViewBuilder
+    private func armGuide() -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: geo.size.width/2 - avatarWidth * 0.4, y: geo.size.height/2 - avatarHeight * 0.28))
+            path.addLine(to: CGPoint(x: geo.size.width/2 - avatarWidth * 0.55, y: geo.size.height/2 + avatarHeight * 0.1))
+        }
+        .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        .foregroundColor(.luxeEcru.opacity(0.8))
+    }
+    
+    // Vertical measurement for Inseam
+    @ViewBuilder
+    private func inseamGuide() -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: geo.size.width/2 - avatarWidth * 0.1, y: geo.size.height/2 + avatarHeight * 0.12))
+            path.addLine(to: CGPoint(x: geo.size.width/2 - avatarWidth * 0.15, y: geo.size.height/2 + avatarHeight * 0.45))
+        }
+        .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        .foregroundColor(.luxeEcru.opacity(0.8))
     }
 }
 
+// MARK: - Refined Dashed Line Shape
 struct DashedLineShape: Shape {
-    var from: CGPoint
-    var to: CGPoint
     func path(in rect: CGRect) -> Path {
-        var path = Path(); path.move(to: from); path.addLine(to: to); return path
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return path
     }
 }
