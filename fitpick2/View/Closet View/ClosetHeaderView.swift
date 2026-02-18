@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Kingfisher
+// ✅ Removed FirebaseAuth and FirebaseFirestore imports - logic successfully moved to ViewModel
 
 struct ClosetHeaderView: View {
     // MARK: - Properties
@@ -67,17 +68,16 @@ struct ClosetHeaderView: View {
                          }
                          .frame(height: 350)
                         
-                    // ✅ 3. PRIORITY: GENERATING TRY-ON (NEW DYNAMIC LOADING)
-                    // Displays cycling text and pulsing animation while AI styles the outfit
+                    // 3. PRIORITY: GENERATING TRY-ON (DYNAMIC LOADING)
                     } else if viewModel.isGeneratingTryOn {
                         TryOnLoadingView()
                             .frame(height: 350)
 
-                    // ✅ 4. TRY-ON RESULT (FIXED: No Cropping)
+                    // 4. TRY-ON RESULT (FIXED: No Cropping)
                     } else if let tryOn = tryOnImage {
                         Image(uiImage: tryOn)
                             .resizable()
-                            .scaledToFit() // fit ensures head/feet aren't cut off
+                            .scaledToFit()
                             .frame(maxWidth: .infinity)
                             .frame(height: 350)
                             .layoutPriority(1)
@@ -91,7 +91,7 @@ struct ClosetHeaderView: View {
                         }
                         .frame(height: 350)
                         
-                    // ✅ 6. EXISTING AVATAR (Default Fallback) (FIXED: No Cropping)
+                    // 6. EXISTING AVATAR (Default Fallback)
                     } else {
                         let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
                         
@@ -99,14 +99,15 @@ struct ClosetHeaderView: View {
                             KFImage(url)
                                 .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
                                 .resizable()
-                                .scaledToFit() // fit ensures full avatar visibility
+                                .scaledToFit()
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 350)
                                 .onTapGesture { showZoomedImage = true }
                                 .id(urlStr)
                         } else {
                             // Empty State / Generate Button
-                            Button(action: { generateAvatar() }) {
+                            // ✅ REFACTORED: Calls ViewModel to handle avatar generation logic
+                            Button(action: { Task { await viewModel.generateAvatar(using: bodyVM) } }) {
                                 VStack(spacing: 15) {
                                     Image(systemName: "sparkles.rectangle.stack").font(.system(size: 50, weight: .light)).foregroundColor(.luxeEcru)
                                     Text("TAP TO GENERATE AVATAR").font(.headline).foregroundColor(.luxeFlax)
@@ -116,7 +117,7 @@ struct ClosetHeaderView: View {
                         }
                     }
                 }
-                // ✅ CARD STYLING (FIXED: Max Width 380 prevents infinite stretch on Pro Max)
+                // CARD STYLING
                 .frame(maxWidth: 380)
                 .frame(minHeight: 350, maxHeight: 500)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -132,7 +133,6 @@ struct ClosetHeaderView: View {
                 
                 // MARK: - FLOATING CONTROLS
                 VStack(spacing: 12) {
-                    // History Button
                     if !isGuest {
                         Button(action: { onShowHistory?() }) {
                             CircleButton(
@@ -143,7 +143,6 @@ struct ClosetHeaderView: View {
                         }
                     }
                     
-                    // Save Button (Only shows when result is available)
                     if tryOnImage != nil && !isGuest {
                         Button(action: { if !isSaved { onSave?() } }) {
                             CircleButton(
@@ -156,7 +155,6 @@ struct ClosetHeaderView: View {
                         .disabled(isSaving || isSaved)
                     }
                     
-                    // Close / Clear Button
                     if tryOnImage != nil || tryOnMessage != nil {
                         Button(action: {
                             withAnimation {
@@ -169,10 +167,10 @@ struct ClosetHeaderView: View {
                         }
                     }
                     
-                    // Generate Avatar Shortcut (Only if avatar exists but user wants to regen)
                     if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
+                        // ✅ REFACTORED: Calls ViewModel to handle avatar generation logic
                         Button(action: {
-                            generateAvatar()
+                            Task { await viewModel.generateAvatar(using: bodyVM) }
                         }) {
                             Image(systemName: "sparkles")
                                 .foregroundColor(.black)
@@ -197,21 +195,9 @@ struct ClosetHeaderView: View {
             HeaderZoomView(image: tryOnImage, imageURL: zoomURL, onDismiss: { showZoomedImage = false })
         }
     }
-    
-    private func generateAvatar() {
-        let generator = bodyVM
-        let mainVM = viewModel
-        
-        Task {
-            await generator.generateAndSaveAvatar()
-            if let newURL = generator.userAvatarURL {
-                await MainActor.run { mainVM.userAvatarURL = newURL }
-            }
-        }
-    }
 }
 
-// MARK: - ✅ NEW: Dynamic Loading View
+// MARK: - Dynamic Loading View
 struct TryOnLoadingView: View {
     @State private var step = 0
     private let steps = [
@@ -227,7 +213,7 @@ struct TryOnLoadingView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // 1. Pulsing Icon
+            // Pulsing Icon
             ZStack {
                 Circle()
                     .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 4)
@@ -246,7 +232,7 @@ struct TryOnLoadingView: View {
                     .symbolEffect(.pulse) // iOS 17 Native Pulse
             }
             
-            // 2. Cycling Text
+            // Cycling Text
             VStack(spacing: 8) {
                 Text("STYLING OUTFIT")
                     .font(.headline)

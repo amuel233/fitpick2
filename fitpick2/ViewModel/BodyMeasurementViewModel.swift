@@ -8,7 +8,6 @@ class BodyMeasurementViewModel: ObservableObject {
     @Published var isGenerating: Bool = false
     @Published var generatedImage: UIImage? = nil
     
-    // ✅ ADDED THIS PROPERTY TO FIX THE ERROR
     @Published var userAvatarURL: String? = nil
     
     // --- NEW VALIDATION STATES ---
@@ -123,9 +122,7 @@ class BodyMeasurementViewModel: ObservableObject {
             let selfieURLString = data["selfie"] as? String ?? ""
             let bodyBaseURLString = data["bodybase"] as? String ?? ""
             
-            
-            
-            // 2. Download UIImages (Matching your selfie implementation)
+            // 2. Download UIImages
             var selfieUIImage: UIImage? = nil
             if !selfieURLString.isEmpty, let selfieURL = URL(string: selfieURLString) {
                 if let (imageData, _) = try? await URLSession.shared.data(from: selfieURL) {
@@ -134,10 +131,9 @@ class BodyMeasurementViewModel: ObservableObject {
             }
             
             let genderTerm = fsGender.uppercased()
-                    let attire = fsGender.lowercased() == "female"
-                        ? "female-cut sleeveless compression top and high-waisted athletic shorts"
-                        : "male-cut sleeveless compression tank and athletic shorts"
-            
+            let attire = fsGender.lowercased() == "female"
+                ? "female-cut sleeveless compression top and high-waisted athletic shorts"
+                : "male-cut sleeveless compression tank and athletic shorts"
             
             var bodyBaseUIImage: UIImage? = nil
             if !bodyBaseURLString.isEmpty, let bodyBaseURL = URL(string: bodyBaseURLString) {
@@ -146,23 +142,21 @@ class BodyMeasurementViewModel: ObservableObject {
                 }
             }
 
-            let generativeModel = FirebaseAI.firebaseAI(backend: .vertexAI(location: "us-central1")).generativeModel(
-                modelName: "gemini-2.5-flash-image"
-            )
+            let generativeModel = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(modelName: "gemini-3-pro-image-preview")
             
+            // 3. Vision-Focused Prompt (REVISED for stronger face mapping)
+            var promptParts: [any Part] = []
             
-            // 3. Vision-Focused Prompt
-            let prompt = """
+            // ✅ PROCESS: Made the face requirement extremely strict to guarantee the selfie is applied.
+            let basePrompt = """
                 [SYSTEM ROLE]: EXPERT BIOMETRIC ANATOMIST.
                 [TARGET BIOLOGY]: Biological \(genderTerm)
                 
                 [VISUAL FIDELITY MANDATE]:
-                - CONDITIONAL BLUEPRINT: IF 'BodyBase' is provided, use it as the absolute skeletal and muscular blueprint. Replicate the user's specific limb-to-torso ratio and bone structure exactly as seen in the image. 
+                - CONDITIONAL BLUEPRINT: IF a 'BodyBase' image is provided below, use it as the absolute skeletal and muscular blueprint. Replicate the user's specific limb-to-torso ratio and bone structure exactly as seen in the image. 
                     - DE-STYLING: Strictly disregard and remove all clothing, accessories, jewelry, tattoos, or skin markings present in 'BodyBase'. Extract only the raw physical volume and bone structure.
                 - ABSENCE OF BASE: If 'BodyBase' is not provided, generate a physiologically accurate \(genderTerm) figure based strictly on the [CORE MEASUREMENTS] below.
-                - GENDER RECOGNITION: The avatar must be clearly identifiable as a \(genderTerm) individual. If 'Selfie' is provided, use it for 100% facial identity; otherwise, use a consistent \(genderTerm) face.
-                - CONDITIONAL BLUEPRINT: IF 'BodyBase' is provided, use it as the absolute skeletal and muscular blueprint. Replicate the user's specific limb-to-torso ratio and bone structure exactly as seen in the image. 
-                - ABSENCE OF BASE: If 'BodyBase' is not provided, generate a physiologically accurate \(genderTerm) figure based strictly on the [CORE MEASUREMENTS] below.
+                - CRITICAL FACE MAPPING: You are provided with a [USER SELFIE]. You MUST extract the exact facial identity, features, and skin tone from this selfie and apply it perfectly to the generated avatar's face. The avatar must look exactly like the person in the selfie.
                 
                 [CORE MEASUREMENTS]:
                 - Stature: \(height)cm (Scale the 'BodyBase' to this exact vertical height).
@@ -182,25 +176,49 @@ class BodyMeasurementViewModel: ObservableObject {
                 - FULL FRAME: Render the entire body within the vertical bounds. DO NOT CROP THE HEAD AND THE FEET.
                 """
             
-            let response: GenerateContentResponse
-                    
-                    // Logic to handle different combinations of available images
-                    if let selfie = selfieUIImage, let bodyBase = bodyBaseUIImage {
-                        response = try await generativeModel.generateContent(prompt, selfie, bodyBase)
-                    } else if let bodyBase = bodyBaseUIImage {
-                        response = try await generativeModel.generateContent(prompt, bodyBase)
-                    } else if let selfie = selfieUIImage {
-                        response = try await generativeModel.generateContent(prompt, selfie)
-                    } else {
-                        response = try await generativeModel.generateContent(prompt)
-                    }
+            promptParts.append(TextPart(basePrompt))
             
+            if let selfie = selfieUIImage {
+                let resizedSelfie = resizeImage(image: selfie, targetSize: CGSize(width: 512, height: 512)) ?? selfie
+                if let jpgData = resizedSelfie.jpegData(compressionQuality: 0.8) {
+                    promptParts.append(TextPart("\n\n[USER SELFIE - USE THIS FOR FACIAL IDENTITY AND SKIN TONE]:"))
+                    promptParts.append(InlineDataPart(data: jpgData, mimeType: "image/jpeg"))
+                }
+            }
             
-            guard let generatedData = response.inlineDataParts.first?.data,
-                          let generatedUIImage = UIImage(data: generatedData) else { return }
+            if let bodyBase = bodyBaseUIImage {
+                let resizedBody = resizeImage(image: bodyBase, targetSize: CGSize(width: 512, height: 512)) ?? bodyBase
+                if let jpgData = resizedBody.jpegData(compressionQuality: 0.8) {
+                    promptParts.append(TextPart("\n\n[BODY BASE - USE THIS FOR MUSCULAR/SKELETAL BLUEPRINT]:"))
+                    promptParts.append(InlineDataPart(data: jpgData, mimeType: "image/jpeg"))
+                }
+            }
             
-            let storageRef = storage.reference().child("avatars/\(userEmail)_avatar.jpg")
-            _ = try await storageRef.putDataAsync(generatedData)
+            promptParts.append(TextPart("\n\nGENERATE THE FINAL AVATAR NOW."))
+            
+            // 4. Send the structured content to the model
+            let content = ModelContent(role: "user", parts: promptParts)
+            let response = try await generativeModel.generateContent([content])
+            
+            guard let firstCandidate = response.candidates.first else { return }
+            var generatedData: Data? = nil
+            
+            for part in firstCandidate.content.parts {
+                if let inlineData = part as? InlineDataPart {
+                    generatedData = inlineData.data
+                    break
+                }
+            }
+            
+            guard let finalData = generatedData, let generatedUIImage = UIImage(data: finalData) else { return }
+            
+            // 5. Upload to Firebase
+            // ✅ PROCESS: Added `UUID().uuidString` to the filename.
+            // By creating a completely unique URL every time a new avatar is generated, Kingfisher is forced to download the new image instead of showing the old cached one.
+            let uniqueFilename = "\(userEmail)_avatar_\(UUID().uuidString).jpg"
+            let storageRef = storage.reference().child("avatars/\(uniqueFilename)")
+            
+            _ = try await storageRef.putDataAsync(finalData)
             let downloadURL = try await storageRef.downloadURL()
             
             try await db.collection("users").document(userEmail).updateData([
@@ -208,6 +226,7 @@ class BodyMeasurementViewModel: ObservableObject {
             ])
             
             await MainActor.run {
+                self.userAvatarURL = downloadURL.absoluteString
                 self.generatedImage = generatedUIImage
                 self.isGenerating = false
             }
@@ -216,5 +235,23 @@ class BodyMeasurementViewModel: ObservableObject {
             await MainActor.run { isGenerating = false }
         }
     }
+    
+    // Helper Process
+    private func resizeImage(image: UIImage, targetSize: CGSize) -> UIImage? {
+        let size = image.size
+        let widthRatio = targetSize.width / size.width
+        let heightRatio = targetSize.height / size.height
+        var newSize: CGSize
+        if(widthRatio > heightRatio) {
+            newSize = CGSize(width: size.width * heightRatio, height: size.height * heightRatio)
+        } else {
+            newSize = CGSize(width: size.width * widthRatio,  height: size.height * widthRatio)
+        }
+        let rect = CGRect(x: 0, y: 0, width: newSize.width, height: newSize.height)
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+        image.draw(in: rect)
+        let newImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return newImage
+    }
 }
-
