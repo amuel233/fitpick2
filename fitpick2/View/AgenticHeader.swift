@@ -4,6 +4,7 @@
 //
 //  Created by Shakira Mhaire on 1/19/26.
 //
+
 import SwiftUI
 import GoogleSignIn
 
@@ -16,124 +17,124 @@ struct AgenticHeader: View {
     let tryOnAction: (() -> Void)?
     @State private var signInError: String? = nil
     @State private var showSignInError: Bool = false
-    // The header now shows a dynamic greeting produced by the ViewModel
 
     var body: some View {
         Group {
             if vm.isConnected {
-                HStack(spacing: 14) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        // If there are multiple upcoming events within the selected window, present a chooser
-                        if vm.upcomingEvents.count > 1 {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Picker(selection: $vm.selectedEventIndex, label:
-                                    Text(vm.upcomingEvents.indices.contains(vm.selectedEventIndex) ? vm.upcomingEvents[vm.selectedEventIndex] : "Upcoming event")
-                                        .font(.title3.weight(.bold))
-                                        .lineLimit(1)
-                                        .padding(.vertical, 8)
-                                        .padding(.horizontal, 12)
-                                        .background(Color("fitPickGold"))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                ) {
-                                    ForEach(vm.upcomingEvents.indices, id: \.self) { idx in
-                                        Text(vm.upcomingEvents[idx])
-                                            .font(.body.weight(.bold))
-                                            .tag(idx)
+                VStack(spacing: 8) {
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if vm.upcomingEvents.count > 1 {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Picker(selection: $vm.selectedEventIndex, label:
+                                        Text(vm.upcomingEvents.indices.contains(vm.selectedEventIndex) ? vm.upcomingEvents[vm.selectedEventIndex] : "Upcoming event")
+                                            .font(.title3.weight(.bold))
+                                            .lineLimit(1)
+                                            .padding(.vertical, 8)
+                                            .padding(.horizontal, 12)
+                                            .background(Color.luxeGoldGradient) // UI Update: Luxe Theme
+                                            .foregroundColor(.black)
+                                            .cornerRadius(10)
+                                    ) {
+                                        ForEach(vm.upcomingEvents.indices, id: \.self) { idx in
+                                            Text(vm.upcomingEvents[idx])
+                                                .font(.body.weight(.bold))
+                                                .tag(idx)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 2)
+
+                                    if vm.upcomingEventDates.indices.contains(vm.selectedEventIndex), let date = vm.upcomingEventDates[vm.selectedEventIndex] {
+                                        Text(vm.formatDateTime(date))
+                                            .font(.subheadline)
+                                            .foregroundColor(.luxeBeige.opacity(0.6)) // UI Update: Luxe Theme
                                     }
                                 }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.leading, 2)
-
-                                if vm.upcomingEventDates.indices.contains(vm.selectedEventIndex), let date = vm.upcomingEventDates[vm.selectedEventIndex] {
-                                    Text(vm.formatDateTime(date))
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                            } else if let event = vm.upcomingEvents.first ?? vm.nextEvent {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Upcoming event: \(event)")
+                                        .font(.headline.weight(.semibold))
+                                        .foregroundColor(.luxeBeige) // UI Update: Luxe Theme
+                                    if let date = vm.nextEventDate {
+                                        Text(vm.formatDateTime(date))
+                                            .font(.subheadline)
+                                            .foregroundColor(.luxeBeige.opacity(0.6)) // UI Update: Luxe Theme
+                                    }
                                 }
-                            }
-                        } else if let event = vm.upcomingEvents.first ?? vm.nextEvent {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Upcoming event: \(event)")
+                            } else {
+                                Text("No upcoming events")
                                     .font(.headline.weight(.semibold))
-                                    .foregroundColor(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let date = vm.nextEventDate {
-                                    Text(vm.formatDateTime(date))
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
+                                    .foregroundColor(.luxeBeige.opacity(0.6))
                             }
-                        } else {
-                            Text("No upcoming events")
-                                .font(.headline.weight(.semibold))
-                                .foregroundColor(.secondary)
+
+                            if vm.upcomingEvents.count > 0 {
+                                Text("\(vm.upcomingEvents.count) upcoming event\(vm.upcomingEvents.count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundColor(.luxeBeige.opacity(0.5))
+                            }
+
+                            if let ai = vm.aiSummary {
+                                Text(ai)
+                                    .font(.subheadline)
+                                    .foregroundColor(.luxeBeige.opacity(0.8))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
 
-                        if vm.upcomingEvents.count > 0 {
-                            Text("\(vm.upcomingEvents.count) upcoming event\(vm.upcomingEvents.count == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        Spacer()
+
+                        if vm.nextEvent == nil {
+                            Image(systemName: vm.weatherIconName)
+                                .font(.title2)
+                                .foregroundColor(.luxeFlax) // UI Update: Luxe Theme
                         }
 
-                        if let ai = vm.aiSummary {
-                            Text(ai)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                        Menu {
+                            Button("Google Calendar") { vm.setPreferredProvider("google") }
+                            Button("iOS Calendar") { vm.setPreferredProvider("local") }
+                            if vm.preferredProvider != nil {
+                                Button("Disconnect", role: .destructive) { vm.disconnect() }
+                            }
+                        } label: {
+                            Text(vm.preferredProvider != nil ? "Synced: \(vm.preferredProvider!.capitalized)" : "Sync Calendar")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(vm.preferredProvider != nil ? Color.luxeBeige.opacity(0.1) : Color.luxeFlax) // UI Update: Luxe Theme
+                                .foregroundColor(vm.preferredProvider != nil ? .luxeBeige : .black)
+                                .cornerRadius(8)
                         }
                     }
+                    .padding(.vertical, 18)
+                    .padding(.horizontal, Theme.cardPadding)
+                    .background(Color.luxeRichCharcoal.opacity(0.8)) // UI Update: Luxe Theme
+                    .cornerRadius(Theme.cornerRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                            .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
+                    )
 
-                    Spacer()
-
-                    // weather icon (hidden when there is an upcoming event)
-                    if vm.nextEvent == nil {
-                        Image(systemName: vm.weatherIconName)
-                            .font(.title2)
-                            .foregroundColor(.yellow)
+                    if let gap = gap,
+                       vm.nextEvent != nil,
+                       (vm.preferredProvider != nil || UserDefaults.standard.bool(forKey: "isLocalCalendarSynced")) {
+                        GapDetectionCard(gap: gap, isLoading: isGeneratingAIPicks, tryOnAction: tryOnAction)
+                            .padding(.top, 8)
                     }
-
-                    Menu {
-                        Button("Google Calendar") { vm.setPreferredProvider("google") }
-                        Button("iOS Calendar") { vm.setPreferredProvider("local") }
-                        if vm.preferredProvider != nil {
-                            Button("Disconnect", role: .destructive) { vm.disconnect() }
-                        }
-                    } label: {
-                        Text(vm.preferredProvider != nil ? "Synced: \(vm.preferredProvider!.capitalized)" : "Sync Calendar")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(vm.preferredProvider != nil ? Color.primary.opacity(0.08) : Color.accentColor)
-                            .foregroundColor(vm.preferredProvider != nil ? .primary : .white)
-                            .cornerRadius(8)
-                    }
-                }
-                .padding(.vertical, 18)
-                .padding(.horizontal, Theme.cardPadding)
-                .background(.regularMaterial)
-                .cornerRadius(Theme.cornerRadius)
-                .shadow(color: Theme.cardShadow, radius: 10, x: 0, y: 5)
-                // If a gap message is provided, a calendar is synced, and there is an upcoming event, show it under the header
-                if let gap = gap,
-                   vm.nextEvent != nil,
-                   (vm.preferredProvider != nil || UserDefaults.standard.bool(forKey: "isLocalCalendarSynced")) {
-                    GapDetectionCard(gap: gap, isLoading: isGeneratingAIPicks, tryOnAction: tryOnAction)
-                        .padding(.top, 8)
                 }
             } else {
-                // Show a simple disconnected state with an inline sync action
                 HStack(spacing: 12) {
                     Image(systemName: "calendar.badge.exclamationmark")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.luxeFlax)
                         .font(.title2)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Not connected")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.luxeBeige)
                         Text("Sync your calendar to get event-based suggestions")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.luxeBeige.opacity(0.6))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -145,32 +146,31 @@ struct AgenticHeader: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
+                            .background(Color.luxeGoldGradient)
+                            .foregroundColor(.black)
                             .cornerRadius(8)
                     }
                 }
                 .padding(Theme.cardPadding)
-                .background(.regularMaterial)
+                .background(Color.luxeRichCharcoal.opacity(0.8))
                 .cornerRadius(Theme.cornerRadius)
-                .shadow(color: Theme.cardShadow, radius: 6, x: 0, y: 3)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                        .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
+                )
             }
-        } // Ends Group
+        }
         .frame(minHeight: 140)
         .onChange(of: vm.selectedEventIndex) { newIndex in
             guard vm.upcomingEvents.indices.contains(newIndex) else { return }
             let event = vm.upcomingEvents[newIndex]
             let date = vm.upcomingEventDates.indices.contains(newIndex) ? vm.upcomingEventDates[newIndex] : nil
-            // Update local published fields so UI reflects the selection immediately
             vm.nextEvent = event
             vm.nextEventDate = date ?? vm.nextEventDate
             NotificationCenter.default.post(name: Notification.Name("CalendarDidUpdate"), object: nil, userInfo: ["event": event, "eventDate": date as Any])
         }
         .onAppear {
             vm.fetchStatus()
-
-            // Auto-probe for local calendar events first when no explicit provider is set,
-            // so the style gap can default to the next event without forcing sign-in.
             if UserDefaults.standard.string(forKey: "preferredCalendarProvider") == nil {
                 let local = LocalCalendarManager()
                 local.fetchAllUpcomingEvents { events in
@@ -188,7 +188,6 @@ struct AgenticHeader: View {
                     }
                 }
             } else {
-                // Auto-connect to previously selected provider
                 if let provider = UserDefaults.standard.string(forKey: "preferredCalendarProvider") {
                     if provider == "google" {
                         vm.connectGoogleCalendar { result in
@@ -219,12 +218,9 @@ struct AgenticHeader: View {
                 }
             }
         }
-
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("SyncCalendarRequested"))) { notif in
             let provider = notif.userInfo?["provider"] as? String ?? "google"
-            // persist preference
             UserDefaults.standard.set(provider, forKey: "preferredCalendarProvider")
-
             if provider == "google" {
                 vm.connectGoogleCalendar { result in
                     switch result {
@@ -256,12 +252,11 @@ struct AgenticHeader: View {
             vm.fetchStatus()
             vm.refreshConnection()
         }
-        
         .alert("Sign-in Error", isPresented: $showSignInError, actions: {
             Button("OK", role: .cancel) { showSignInError = false }
         }, message: { Text(signInError ?? "An unknown error occurred.") })
-    } 
-} 
+    }
+}
 
 final class AgenticHeaderViewModel: ObservableObject {
     @Published var isConnected: Bool = false
@@ -274,12 +269,10 @@ final class AgenticHeaderViewModel: ObservableObject {
     @Published var signedInEmail: String? = nil
     @Published var morningGreeting: String? = nil
     @Published var preferredProvider: String? = nil
-    // Expose multiple upcoming events for the next window (e.g., today)
     @Published var upcomingEvents: [String] = []
     @Published var upcomingEventDates: [Date?] = []
     @Published var selectedEventIndex: Int = 0 {
         didSet {
-            // When user picks a different event, notify the rest of the app
             if upcomingEvents.indices.contains(selectedEventIndex) {
                 let event = upcomingEvents[selectedEventIndex]
                 let date = upcomingEventDates.indices.contains(selectedEventIndex) ? upcomingEventDates[selectedEventIndex] : nil
@@ -287,9 +280,10 @@ final class AgenticHeaderViewModel: ObservableObject {
             }
         }
     }
-    private let weather = WeatherManager()
     
+    private let weather = WeatherManager()
     private let calendar = CalendarManager()
+    
     init() {
         preferredProvider = UserDefaults.standard.string(forKey: "preferredCalendarProvider")
     }
@@ -299,7 +293,6 @@ final class AgenticHeaderViewModel: ObservableObject {
         updateHeaderAppearance()
     }
     
-    /// Refresh the next event and header appearance without triggering sign-in flows.
     func refreshEvents() {
         calendar.fetchUpcomingEvents(daysAhead: 0) { [weak self] items in
             DispatchQueue.main.async {
@@ -307,7 +300,6 @@ final class AgenticHeaderViewModel: ObservableObject {
                 self.aiSummary = nil
                 self.updateGreeting()
                 self.updateHeaderAppearance()
-
                 self.upcomingEvents = items.map { $0.0 }
                 self.upcomingEventDates = items.map { $0.2 }
                 if let first = self.upcomingEvents.first {
@@ -319,11 +311,9 @@ final class AgenticHeaderViewModel: ObservableObject {
         }
     }
 
-    /// Try to refresh/restore the calendar connection (silent restore for Google, reconnect local) without UI.
     func refreshConnection() {
         preferredProvider = UserDefaults.standard.string(forKey: "preferredCalendarProvider")
         if preferredProvider == "google" {
-            // Attempt silent restore of Google Sign-In and then refresh events
             GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
                 DispatchQueue.main.async {
                     if let user = user {
@@ -332,20 +322,16 @@ final class AgenticHeaderViewModel: ObservableObject {
                         self?.preferredProvider = "google"
                         self?.refreshEvents()
                     } else {
-                        // If restore failed, still try to refresh events (may work if calendar is public or cached)
                         self?.refreshEvents()
                     }
                 }
             }
         } else if preferredProvider == "local" {
-            // Re-fetch local calendar details (this does not present UI)
             connectLocalCalendar { _ in }
-        } else {
-            // no provider set: nothing to refresh
         }
     }
+    
     private func updateGreeting() {
-        // Use a concise greeting without a day descriptor
         let greeting = "Good"
         let suggestion = aiSummary ?? "Have a great day."
         DispatchQueue.main.async { [weak self] in
@@ -353,9 +339,7 @@ final class AgenticHeaderViewModel: ObservableObject {
         }
     }
 
-    /// Update header icon and gradient based on time of day and, when available, local weather.
     func updateHeaderAppearance() {
-        // Default gradient based on time of day
         let hour = Calendar.current.component(.hour, from: Date())
         var start = Color.blue.opacity(0.08)
         var end = Color.purple.opacity(0.08)
@@ -363,24 +347,15 @@ final class AgenticHeaderViewModel: ObservableObject {
 
         switch hour {
         case 6..<12:
-            start = Color.yellow.opacity(0.12)
-            end = Color.orange.opacity(0.08)
-            defaultIcon = "sun.max.fill"
+            start = Color.yellow.opacity(0.12); end = Color.orange.opacity(0.08); defaultIcon = "sun.max.fill"
         case 12..<18:
-            start = Color.blue.opacity(0.08)
-            end = Color.purple.opacity(0.08)
-            defaultIcon = "cloud.sun.fill"
+            start = Color.blue.opacity(0.08); end = Color.purple.opacity(0.08); defaultIcon = "cloud.sun.fill"
         case 18..<22:
-            start = Color.purple.opacity(0.12)
-            end = Color.indigo.opacity(0.16)
-            defaultIcon = "moon.stars.fill"
+            start = Color.purple.opacity(0.12); end = Color.indigo.opacity(0.16); defaultIcon = "moon.stars.fill"
         default:
-            start = Color.black.opacity(0.12)
-            end = Color.gray.opacity(0.12)
-            defaultIcon = "moon.stars.fill"
+            start = Color.black.opacity(0.12); end = Color.gray.opacity(0.12); defaultIcon = "moon.stars.fill"
         }
 
-        // Attempt to fetch local forecast to pick a more accurate icon
         weather.requestLocation { [weak self] res in
             switch res {
             case .success((let lat, let lon)):
@@ -421,30 +396,16 @@ final class AgenticHeaderViewModel: ObservableObject {
         return "cloud.sun.fill"
     }
     
-    struct SignInInfo {
-        let email: String?
-    }
+    struct SignInInfo { let email: String? }
     
     func connectGoogleCalendar(completion: @escaping (Result<SignInInfo, Error>) -> Void) {
-        guard let rootViewController = UIApplication.shared
-            .connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first?
-            .windows
-            .first?
-            .rootViewController else {
+        guard let rootViewController = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first?.windows.first?.rootViewController else {
             performStubbedConnect(completion: completion)
             return
         }
-        
         GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController, hint: nil, additionalScopes: ["https://www.googleapis.com/auth/calendar.readonly"]) { [weak self] signInResult, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
+            if let error = error { completion(.failure(error)); return }
             DispatchQueue.main.async { self?.isConnected = true }
-
             let email = signInResult?.user.profile?.email
             self?.calendar.fetchUpcomingEvents(daysAhead: 0) { items in
                 DispatchQueue.main.async {
@@ -489,16 +450,7 @@ final class AgenticHeaderViewModel: ObservableObject {
     func setPreferredProvider(_ provider: String, completion: ((Result<SignInInfo, Error>) -> Void)? = nil) {
         UserDefaults.standard.set(provider, forKey: "preferredCalendarProvider")
         preferredProvider = provider
-
-        if provider == "google" {
-            connectGoogleCalendar { res in
-                completion?(res)
-            }
-        } else {
-            connectLocalCalendar { res in
-                completion?(res)
-            }
-        }
+        if provider == "google" { connectGoogleCalendar { res in completion?(res) } } else { connectLocalCalendar { res in completion?(res) } }
     }
 
     func disconnect() {
@@ -528,9 +480,7 @@ final class AgenticHeaderViewModel: ObservableObject {
     }
 
     func formatDateTime(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
+        let df = DateFormatter(); df.dateStyle = .medium; df.timeStyle = .short
         return df.string(from: date)
     }
 }

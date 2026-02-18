@@ -14,22 +14,24 @@ struct HomeView: View {
     @State private var showCloset: Bool = false
     @StateObject private var viewModel = HomeViewModel()
 
-    let fitPickGold = Color("fitPickGold")
+    // Luxe Theme Constants
+    let luxeGold = Color.luxeFlax
+    let luxeText = Color.luxeBeige
 
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.cardSpacing) {
                 
-                // MARK: - Gold & White Welcome Header
+                // MARK: - Luxe Welcome Header
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Welcome back,")
                             .font(.system(size: 16, weight: .medium, design: .rounded))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(luxeText.opacity(0.7))
                         
                         Text("\(session.username)!")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundColor(fitPickGold)
+                            .foregroundColor(luxeGold)
                     }
                     Spacer()
                 }
@@ -37,8 +39,7 @@ struct HomeView: View {
                 .padding(.horizontal, 4)
 
                 // MARK: - Dynamic Header Group
-                // This VStack specifically controls the gap between the Greeting and the AgenticHeader
-                VStack(spacing: 6) {
+                VStack(spacing: 12) {
                     TimeGreetingCard(
                         greeting: viewModel.timeBasedGreeting,
                         message: viewModel.morningBriefing,
@@ -75,25 +76,11 @@ struct HomeView: View {
             .padding(Theme.cardSpacing)
         }
         .refreshable { viewModel.refreshAll() }
-        .background(viewModel.backgroundColor.edgesIgnoringSafeArea(.all))
+        .background(Color.luxeSpotlightGradient.edgesIgnoringSafeArea(.all))
     }
 }
 
 extension TimeGreetingCard {
-    static func gradientForCurrentTime() -> [Color] {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 6..<12:
-            return [Color.yellow.opacity(0.12), Color.orange.opacity(0.08)]
-        case 12..<18:
-            return [Color.blue.opacity(0.08), Color.purple.opacity(0.08)]
-        case 18..<22:
-            return [Color.purple.opacity(0.12), Color.indigo.opacity(0.16)]
-        default:
-            return [Color.black.opacity(0.12), Color.gray.opacity(0.12)]
-        }
-    }
-
     static func iconNameForCurrentTime() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -107,8 +94,8 @@ extension TimeGreetingCard {
     static func iconColorForCurrentTime() -> Color {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 6..<12: return Color.yellow
-        case 12..<18: return Color.yellow
+        case 6..<12: return Color.luxeFlax
+        case 12..<18: return Color.luxeFlax
         case 18..<22: return Color.white
         default: return Color.white
         }
@@ -133,17 +120,16 @@ struct TimeGreetingCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(greeting)
                         .font(.system(.title, design: .rounded).weight(.bold))
-                        .foregroundColor(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundColor(.luxeBeige)
                     if let temp = temperature {
                         HStack(spacing: 8) {
                             Text(temp)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.luxeFlax)
                             if let loc = location {
                                 Text("· \(loc)")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.luxeBeige.opacity(0.6))
                             }
                         }
                     }
@@ -153,7 +139,7 @@ struct TimeGreetingCard: View {
 
             Text(message)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.luxeBeige.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
 
             if tryOnAvailable {
@@ -161,41 +147,26 @@ struct TimeGreetingCard: View {
                     Spacer()
                     Button(action: { tryOnAction?() }) {
                         Text("Try On")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 16)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.luxeBlack)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 20)
+                            .background(Color.luxeGoldGradient)
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color("fitPickGold"))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 140)
         .padding(Theme.cardPadding)
-        .background(
-            LinearGradient(gradient: Gradient(colors: Self.gradientForCurrentTime()), startPoint: .topLeading, endPoint: .bottomTrailing)
-        )
+        .background(Color.luxeRichCharcoal.opacity(0.8))
         .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.blue.opacity(0.08),
-                    Color.purple.opacity(0.08)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
         )
-        .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
     }
 }
-
-
-
-// Sustainability/combined card removed; SmartWardrobePulse provides current pulse and upload CTA.
 
 struct GapDetectionCard: View {
     let gap: HomeViewModel.GapMessage
@@ -204,12 +175,10 @@ struct GapDetectionCard: View {
 
     private func cleanedSuggestion(_ s: String) -> String {
         var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Remove numeric prefixes like "1.", "2)", "1)" etc.
         if let r = t.range(of: #"^\s*\d+[\.\)\:]*\s*"#, options: .regularExpression) {
             t.removeSubrange(r)
             t = t.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        // Remove leading bullet characters
         if let first = t.first, ["•", "-", "*"] .contains(String(first)) {
             t.removeFirst()
             t = t.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -220,57 +189,52 @@ struct GapDetectionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.circle.fill")
+                Image(systemName: "exclamationmark.shield.fill")
                     .font(.title2)
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.luxeFlax)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Style Gap Detected")
-                        .font(.headline.weight(.semibold))
-                    if gap.useTryOn {
-                        Text(gap.title)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("(No suitable clothes for event)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(.luxeBeige)
+                    Text(gap.useTryOn ? gap.title : "(No suitable clothes for event)")
+                        .font(.caption)
+                        .foregroundColor(.luxeFlax.opacity(0.8))
                 }
                 Spacer()
             }
 
             Text(gap.detail)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.luxeBeige.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
 
-            // AI-generated suggestion bullets
             if !gap.suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(gap.suggestions, id: \.self) { suggestion in
-                        let text = cleanedSuggestion(suggestion)
                         HStack(alignment: .top, spacing: 8) {
-                            Text("•")
+                            Circle()
+                                .fill(Color.luxeEcru)
+                                .frame(width: 4, height: 4)
+                                .padding(.top, 7)
+                            Text(cleanedSuggestion(suggestion))
                                 .font(.subheadline)
-                            Text(text)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .foregroundColor(.luxeBeige.opacity(0.8))
                         }
                     }
                 }
             }
 
             HStack {
-                Spacer()
                 if gap.useTryOn {
                     Button(action: { tryOnAction?() }) {
                         Text("Try On")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.luxeBlack)
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.luxeGoldGradient)
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color("fitPickGold"))
                 } else {
                     let isClickable = !gap.externalURL.isEmpty
                     Button(action: {
@@ -279,21 +243,24 @@ struct GapDetectionCard: View {
                         }
                     }) {
                         Text("View Picks")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(isClickable ? .luxeBlack : .white.opacity(0.3))
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(isClickable ? Color.luxeGoldGradient : LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(isClickable ? Color.accentColor : Color.gray)
                     .disabled(!isClickable)
                 }
             }
-
-            // Button tint and enabled state reflect readiness (no loading bar shown)
         }
         .padding(Theme.cardPadding)
-        .background(.regularMaterial)
+        .background(Color.luxeRichCharcoal.opacity(0.9))
         .cornerRadius(Theme.cornerRadius)
-        .shadow(color: Theme.cardShadow, radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.cornerRadius)
+                .stroke(Color.luxeFlax.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 
