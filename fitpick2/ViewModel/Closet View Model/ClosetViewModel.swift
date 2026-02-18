@@ -321,46 +321,19 @@ class ClosetViewModel: ObservableObject {
     }
     
     // MARK: - UPDATE & DELETE LOGIC
-    
-    /// Updates item details (Category, Subcategory & Size) in Firestore and local state
-    /// - Parameters:
-    ///   - item: The original item
-    ///   - newCategory: The updated ClothingCategory enum
-    ///   - newSubCategory: The edited name/category string
-    ///   - newSize: The edited size string
     func updateItemDetails(item: ClothingItem, newCategory: ClothingCategory, newSubCategory: String, newSize: String) async {
-        // 1. Prepare data for Firestore
-        let updates: [String: Any] = [
-            "category": newCategory.rawValue, // ✅ Added Category Update
-            "subCategory": newSubCategory,
-            "subcategory": newSubCategory,
-            "size": newSize
-        ]
-        
+        let updates: [String: Any] = [ "category": newCategory.rawValue, "subCategory": newSubCategory, "subcategory": newSubCategory, "size": newSize ]
         do {
-            // 2. Update Firestore (Root 'clothes' collection)
             try await db.collection("clothes").document(item.id).updateData(updates)
-            
-            // 3. Update Local State (Optimistic Update)
             await MainActor.run {
                 if let index = clothingItems.firstIndex(where: { $0.id == item.id }) {
                     let oldItem = clothingItems[index]
-                    let newItem = ClothingItem(
-                        id: oldItem.id,
-                        remoteURL: oldItem.remoteURL,
-                        category: newCategory,       // ✅ Updated
-                        subCategory: newSubCategory, // Updated
-                        size: newSize,               // Updated
-                        ownerEmail: oldItem.ownerEmail,
-                        dateAdded: oldItem.dateAdded
-                    )
+                    let newItem = ClothingItem(id: oldItem.id, remoteURL: oldItem.remoteURL, category: newCategory, subCategory: newSubCategory, size: newSize, ownerEmail: oldItem.ownerEmail, dateAdded: oldItem.dateAdded)
                     clothingItems[index] = newItem
                     print("✅ Local item updated: \(newCategory.rawValue) - \(newSubCategory)")
                 }
             }
-        } catch {
-            print("❌ Error updating item details: \(error.localizedDescription)")
-        }
+        } catch { print("❌ Error updating item details: \(error.localizedDescription)") }
     }
     
     func deleteItem(_ item: ClothingItem) {
@@ -369,7 +342,7 @@ class ClosetViewModel: ObservableObject {
         storage.reference(forURL: item.remoteURL).delete { _ in }
     }
 
-    // MARK: - 4. History / Saved Looks Logic (Retained)
+    // MARK: - 4. History / Saved Looks Logic
     func listenToSavedLooks() {
         guard let userEmail = Auth.auth().currentUser?.email else { return }
         historyListener = db.collection("generated_looks")
@@ -405,7 +378,7 @@ class ClosetViewModel: ObservableObject {
         storage.reference(forURL: look.imageURL).delete { _ in }
     }
     
-    // MARK: - Save Generated Look (Retained)
+    // MARK: - Save Generated Look
     func saveCurrentLook() async {
         guard let image = generatedTryOnImage, let user = Auth.auth().currentUser else { return }
         isSavingTryOn = true
@@ -430,7 +403,7 @@ class ClosetViewModel: ObservableObject {
         } catch { print("❌ Failed to save look: \(error.localizedDescription)"); isSavingTryOn = false }
     }
     
-    // MARK: - Helpers & Validation (Retained)
+    // MARK: - Helpers & Validation
     func resizeImage(image: UIImage, targetSize: CGSize) -> UIImage? {
         let size = image.size
         let widthRatio = targetSize.width / size.width
@@ -468,5 +441,41 @@ class ClosetViewModel: ObservableObject {
                 #endif
             }
         }.value
+    }
+    
+    // ✅ REFACTORED: Avatar Generation logic properly moved to ViewModel
+    func generateAvatar(using bodyVM: BodyMeasurementViewModel) async {
+        guard let userEmail = effectiveEmail else { return }
+        
+        do {
+            // PROCESS 1: Fetch the absolute latest measurements from Firestore.
+            let document = try await db.collection("users").document(userEmail).getDocument()
+            if let data = document.data() {
+                await MainActor.run {
+                    bodyVM.gender = data["gender"] as? String
+                    if let measurements = data["measurements"] as? [String: Any] {
+                        bodyVM.height = measurements["height"] as? Double ?? 0
+                        bodyVM.bodyWeight = measurements["bodyWeight"] as? Double ?? 0
+                        bodyVM.chest = measurements["chest"] as? Double ?? 0
+                        bodyVM.shoulderWidth = measurements["shoulderWidth"] as? Double ?? 0
+                        bodyVM.armLength = measurements["armLength"] as? Double ?? 0
+                        bodyVM.waist = measurements["waist"] as? Double ?? 0
+                        bodyVM.hips = measurements["hips"] as? Double ?? 0
+                        bodyVM.inseam = measurements["inseam"] as? Double ?? 0
+                        bodyVM.shoeSize = measurements["shoeSize"] as? Double ?? 0
+                    }
+                }
+            }
+        } catch {
+            print("Error fetching updated measurements: \(error)")
+        }
+        
+        // PROCESS 2: Start the AI generation with the newly updated body metrics
+        await bodyVM.generateAndSaveAvatar()
+        
+        // PROCESS 3: Sync the generated URL back to the main closet view
+        if let newURL = bodyVM.userAvatarURL {
+            await MainActor.run { self.userAvatarURL = newURL }
+        }
     }
 }
