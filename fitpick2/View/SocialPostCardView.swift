@@ -193,7 +193,7 @@ struct SocialPostCardView: View {
                     HStack(spacing: 12) {
                         TextField("E.G. A PARISIAN RUNWAY AT NIGHT", text: $backgroundPrompt)
                             .font(.system(size: 13, design: .serif)).italic()
-                            .padding(15).background(Color.luxeRichCharcoal).cornerRadius(4).foregroundColor(Color.luxeBeige)
+                            .padding(15).background(Color.white).cornerRadius(4).foregroundColor(Color.luxeBeige)
                         
                         Button(action: {
                             Task {

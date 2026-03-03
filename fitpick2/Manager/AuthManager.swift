@@ -19,12 +19,34 @@ class AuthManager: ObservableObject {
     @AppStorage("loginMethod") var loginMethod: String = "" // "email" or "google"
     @AppStorage("savedEmail") var savedEmail: String = ""
     @AppStorage("hasLoggedInBefore") var hasLoggedInBefore: Bool = false
-    
+        
     @Published var errorMessage: String? = nil
     @Published var showErrorAlert: Bool = false
     
     private let service = "fitpick-auth"
     private let db = Firestore.firestore()
+    
+    // To detect if the app was deleted
+    private let firstLaunchKey = "isFirstLaunchAfterInstall"
+
+    init() {
+        checkFirstLaunch()
+    }
+
+    private func checkFirstLaunch() {
+        // UserDefaults is cleared on app deletion.
+        // If this key is nil/false, it means the app was just installed.
+        if !UserDefaults.standard.bool(forKey: firstLaunchKey) {
+            
+            // If the user was previously a Google user, their loginMethod
+            // string is now empty "" because AppStorage was wiped.
+            // We force a Google Sign-Out to clear the persistent Keychain.
+            GIDSignIn.sharedInstance.signOut()
+            
+            // Set the flag so this doesn't run again until the next delete/reinstall
+            UserDefaults.standard.set(true, forKey: firstLaunchKey)
+        }
+    }
 
     // MARK: - Email Login
     func login(email: String, password: String) {
