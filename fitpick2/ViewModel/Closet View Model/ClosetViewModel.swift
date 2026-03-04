@@ -168,13 +168,22 @@ class ClosetViewModel: ObservableObject {
         if fullBodyItems.isEmpty && bottoms.count > 1 { isGeneratingTryOn = false; tryOnMessage = "Please select only 1 Bottom."; return }
         if tops.count > 2 { isGeneratingTryOn = false; tryOnMessage = "Layering Limit: Max 2 Tops."; return }
         
-        guard let email = effectiveEmail else { return }
+        // CHANGE: Always use the logged-in user's email for the Avatar even if we are looking at a friend's closet.
+        guard let myEmail = Auth.auth().currentUser?.email else {
+            isGeneratingTryOn = false
+            tryOnMessage = "Please log in to try on clothes."
+            return
+        }
         
         do {
-            let userDoc = try await db.collection("users").document(email).getDocument()
+            // Fetch logged in user avatar
+            let userDoc = try await db.collection("users").document(myEmail).getDocument()
             let userData = userDoc.data()
+            
             guard let avatarURLString = userData?["avatarURL"] as? String, let avatarURL = URL(string: avatarURLString) else {
-                isGeneratingTryOn = false; tryOnMessage = "Avatar not found. Please tap 'Sparkles' to generate one."; return
+                isGeneratingTryOn = false
+                tryOnMessage = "Your avatar was not found. Please create one in your profile first."
+                return
             }
             
             let gender = userData?["gender"] as? String ?? "Neutral"
