@@ -13,13 +13,16 @@ struct SelfieCameraPreview: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
-        
-        // Setup the layer that displays the video feed
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.frame = view.frame
         previewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(previewLayer)
         
+        if let connection = previewLayer.connection, connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = true
+        }
+        
+        view.layer.addSublayer(previewLayer)
         return view
     }
 

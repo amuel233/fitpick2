@@ -11,10 +11,11 @@ enum Theme {
     static let cornerRadius: CGFloat = 20
 
     // Padding applied inside cards
-    static let cardPadding: CGFloat = 20
+    static let cardPadding: CGFloat = 16
 
     // Vertical / horizontal spacing between elements
-    static let cardSpacing: CGFloat = 28
+    // Reduced to tighten spacing between cards
+    static let cardSpacing: CGFloat = 16
 
     // Subtle shadow color used to lift cards off the background in light/dark
     static let cardShadow = Color.black.opacity(0.06)

@@ -9,66 +9,82 @@ import SwiftUI
 
 struct SocialsView: View {
     @StateObject var firestoreManager = FirestoreManager()
-    @EnvironmentObject var session: UserSession
     @State private var isShowingUpload = false
     
-    let fitPickGold = Color("fitPickGold")
-    let fitPickBlack = Color("fitPickBlack")
+    // Luxe Theme alignment
+    let fitPickGold = Color.luxeEcru
+    let fitPickBlack = Color.luxeDeepOnyx
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            fitPickBlack.ignoresSafeArea()
-            
-            // Global State: If no posts exist yet, show a big loader
-            if firestoreManager.posts.isEmpty {
-                VStack {
-                    Spacer()
-                    ProgressView()
-                        .tint(fitPickGold)
-                        .scaleEffect(2)
-                    Text("Refreshing your feed...")
-                        .font(.subheadline)
-                        .foregroundColor(fitPickGold)
-                        .padding(.top, 20)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) {
-                        Text("Feed")
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
-                            .foregroundColor(fitPickGold)
-                            .padding(.horizontal)
+        NavigationStack {
+            ZStack(alignment: .bottomTrailing) {
+                // Background: Spotlight Gradient
+                Color.luxeSpotlightGradient.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // MARK: Header
+                    HStack(alignment: .center) {
+                        Text("FEED")
+                        .font(.system(size: 32, weight: .black))
+                        .tracking(2)
+                        .foregroundColor(Color.luxeFlax)
+                        .modifier(ShimmerEffect())
                         
-                        ForEach(firestoreManager.posts) { post in
-                            SocialPostCardView(post: post, goldColor: fitPickGold)
+                        Spacer()
+                        
+                        NavigationLink(destination: ProfileView(firestoreManager: firestoreManager)) {
+                            if let selfieUrl = firestoreManager.currentUserData?.selfie, !selfieUrl.isEmpty {
+                                AsyncImage(url: URL(string: selfieUrl)) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: { ProgressView() }
+                                .frame(width: 40, height: 40).clipShape(Circle())
+                                .overlay(Circle().stroke(Color.luxeFlax, lineWidth: 1))
+                            } else {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .resizable().frame(width: 40, height: 40)
+                                    .foregroundColor(Color.luxeFlax)
+                            }
                         }
                     }
-                    .padding(.top)
+                    .padding()
+
+                    // MARK: Posts Feed
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(firestoreManager.posts) { post in
+                                SocialPostCardView(
+                                    post: post,
+                                    goldColor: fitPickGold,
+                                    firestoreManager: firestoreManager
+                                )
+                            }
+                        }
+                    }
+                    .background(Color.clear)
+                    .refreshable {
+                        firestoreManager.fetchSocialPosts()
+                        firestoreManager.fetchFollowers()
+                        firestoreManager.fetchFollowing()
+                    }
                 }
-                .refreshable {
-                    firestoreManager.fetchSocialPosts()
+                
+                // Upload Button with Luxe Gradient
+                Button(action: { isShowingUpload = true }) {
+                    Image(systemName: "plus")
+                        .font(.title.bold())
+                        .foregroundColor(.luxeBlack)
+                        .frame(width: 60, height: 60)
+                        .background(Color.luxeGoldGradient)
+                        .clipShape(Circle())
+                        .shadow(color: Color.luxeEcru.opacity(0.4), radius: 10)
                 }
+                .padding(25)
             }
-            
-            // Floating Upload Button
-            Button(action: { isShowingUpload = true }) {
-                Image(systemName: "plus")
-                    .font(.title.bold())
-                    .foregroundColor(.black)
-                    .frame(width: 60, height: 60)
-                    .background(fitPickGold)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 5, x: 0, y: 5)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .fullScreenCover(isPresented: $isShowingUpload) {
+                UploadPostView()
             }
-            .padding(20)
-        }
-        .fullScreenCover(isPresented: $isShowingUpload) {
-            UploadPostView()
-        }
-        .onAppear {
-            firestoreManager.fetchSocialPosts()
         }
     }
 }

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.fitpick.wardrobeCheck</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -15,5 +19,11 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>899654800134-p2b7g759drtt306j5ksmnjl87tfth09b.apps.googleusercontent.com</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>processing</string>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
 </dict>
 </plist>

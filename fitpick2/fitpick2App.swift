@@ -1,6 +1,6 @@
 //
-//  fitpickApp.swift
-//  fitpick
+//  fitpick2App.swift
+//  fitpick2
 //
 //  Created by Amuel Ryco Nidoy on 1/9/26.
 //
@@ -10,36 +10,94 @@ import FirebaseCore
 import FirebaseAuth
 import GoogleSignIn
 import FirebaseFirestore
+import FirebaseMessaging
+import BackgroundTasks
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    let taskIdentifier = "com.fitpick.wardrobeCheck"
+    private let reminderService = WardrobeReminderService()
+    
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
+        
+        // NotificationManager handles the token logic
+        Messaging.messaging().delegate = NotificationManager.shared
+        
+        // Register the background task
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+            self.handleAppRefresh(task: task as! BGAppRefreshTask)
+        }
         return true
     }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+    }
+
+    /// Schedules the next background wardrobe check
+    func scheduleAppRefresh(at date: Date? = nil) {
+        let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
+        let minDelay = Date(timeIntervalSinceNow: 15 * 60) // Minimum 15-minute window
+        request.earliestBeginDate = date != nil ? max(date!, minDelay) : minDelay
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.timeZone = .current
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            print("🚀 Next check scheduled for: \(formatter.string(from: request.earliestBeginDate!))")
+        } catch {
+            print("❌ Scheduling Error: \(error)")
+        }
+    }
+
+    /// Executed when the system wakes the app up in the background
+    func handleAppRefresh(task: BGAppRefreshTask) {
+        reminderService.runReminderCheck { nextRun in
+            self.scheduleAppRefresh(at: nextRun) // Schedule the subsequent check
+            task.setTaskCompleted(success: true)
+        }
+        task.expirationHandler = { task.setTaskCompleted(success: false) }
+    }
     
-    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-        return GIDSignIn.sharedInstance.handle(url)
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return .portrait
     }
 }
 
 @main
 struct fitpick2App: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @Environment(\.scenePhase) private var scenePhase
+    
     @StateObject private var appState = AppState()
     @StateObject private var session = UserSession()
-    
+    private let reminderService = WardrobeReminderService()
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
                 .environmentObject(session)
                 .onAppear {
-                    // Link the session to appState so navigation triggers automatically
                     session.linkAppState(appState)
+                    NotificationManager.shared.requestPermissions()
                 }
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
+                }
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    // Triggered when user leaves the app
+                    if newPhase == .background {
+                        delegate.scheduleAppRefresh()
+                    }
+                    // Triggered when user opens the app
+                    if newPhase == .active {
+                        reminderService.runReminderCheck { _ in }
+                    }
                 }
         }
     }
@@ -76,7 +134,6 @@ class UserSession: ObservableObject {
                 if let user = user {
                     self?.isLoggedIn = true
                     self?.email = user.email
-                    // This is the trigger that gets you past the LoginView
                     self?.appState?.isLoggedIn = true
                     self?.fetchFirestoreUsername(userId: user.email ?? "")
                 } else {
@@ -92,14 +149,25 @@ class UserSession: ObservableObject {
     private func fetchFirestoreUsername(userId: String) {
         userListener?.remove()
         
-        // Ensure we use lowercase for document IDs to match AuthManager sync
         userListener = db.collection("users").document(userId.lowercased()).addSnapshotListener { [weak self] snapshot, error in
-            if let document = snapshot, document.exists {
+            guard let self = self, let document = snapshot else { return }
+            
+            if document.exists {
                 let data = document.data()
-                self?.username = data?["username"] as? String ?? "User"
+                self.username = data?["username"] as? String ?? "User"
+                let hasProfile = data?["hasProfile"] as? Bool ?? false
+                let measurements = data?["measurements"] as? [String: Any]
+                let hasExistingData = measurements?["height"] != nil
+
+                if !hasProfile && !hasExistingData {
+                    DispatchQueue.main.async {
+                        self.appState?.selectedTab = 1
+                    }
+                }
             } else {
-                // Fallback for new users before their Firestore doc is created
-                self?.username = userId.components(separatedBy: "@").first ?? "User"
+                DispatchQueue.main.async {
+                    self.appState?.selectedTab = 1
+                }
             }
         }
     }
