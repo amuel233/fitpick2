@@ -12,8 +12,8 @@ import FirebaseAILogic
 /// Small wrapper to request an AI-generated wardrobe/accessory suggestion
 /// given location, time of day, and current weather. Falls back to a rule-based suggestion.
 class WeatherAIManager {
-    private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
-    private lazy var model = ai.generativeModel(modelName: "gemini-2.5-flash")
+    private let ai = FirebaseAI.firebaseAI(backend: .agentPlatform())
+    private lazy var model = ai.generativeModel(modelName: "gemini-3.7-flash")
 
     func generateSuggestion(location: String?, timeOfDay: String, temperatureC: Double?, condition: String?) async -> String {
         let loc = location ?? "your area"

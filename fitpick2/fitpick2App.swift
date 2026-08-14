@@ -12,6 +12,7 @@ import GoogleSignIn
 import FirebaseFirestore
 import FirebaseMessaging
 import BackgroundTasks
+import FirebaseAppCheck
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     let taskIdentifier = "com.fitpick.wardrobeCheck"
@@ -19,6 +20,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        let providerFactory = AppCheckDebugProviderFactory()
+        AppCheck.setAppCheckProviderFactory(providerFactory)
         FirebaseApp.configure()
         
         // NotificationManager handles the token logic
