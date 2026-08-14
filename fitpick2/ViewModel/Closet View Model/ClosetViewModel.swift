@@ -42,13 +42,13 @@ class ClosetViewModel: ObservableObject {
     private var currentItemsUsed: [String] = []
     
     // --- Firebase Services ---
-    private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
+    private let ai = FirebaseAI.firebaseAI(backend: .agentPlatform())
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
     private var listener: ListenerRegistration?
     private var historyListener: ListenerRegistration?
     
-    private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-3-pro-image-preview")
+    private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-3-pro-image")
 
     @Published var userAvatarURL: String? = nil
     private var userListener: ListenerRegistration?

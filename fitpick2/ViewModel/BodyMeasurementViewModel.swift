@@ -142,7 +142,7 @@ class BodyMeasurementViewModel: ObservableObject {
                 }
             }
 
-            let generativeModel = FirebaseAI.firebaseAI(backend: .googleAI()).generativeModel(modelName: "gemini-3-pro-image-preview")
+            let generativeModel = FirebaseAI.firebaseAI(backend: .agentPlatform()).generativeModel(modelName: "gemini-3-pro-image")
             
             // 3. Vision-Focused Prompt (REVISED for stronger face mapping)
             var promptParts: [any Part] = []

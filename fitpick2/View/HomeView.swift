@@ -299,8 +299,8 @@ final class HomeViewModel: ObservableObject {
     private let firestore: FirestoreManager
     private let calendar: CalendarManager
     private let weather = WeatherManager()
-    private let ai = FirebaseAI.firebaseAI(backend: .googleAI())
-    private lazy var textGen = ai.generativeModel(modelName: "gemini-2.5-flash")
+    private let ai = FirebaseAI.firebaseAI(backend: .agentPlatform())
+    private lazy var textGen = ai.generativeModel(modelName: "gemini-3.7-flash")
     private var calendarObserver: NSObjectProtocol?
     
         init(closetTabIndex: Int = 1,
