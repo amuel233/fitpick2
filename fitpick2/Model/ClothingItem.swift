@@ -90,7 +90,7 @@ struct SavedLook: Identifiable, Codable {
 struct AICategorization: Codable {
     let category: String
     let subcategory: String
-    let size: String
+    var size: String? = nil
 }
 
 // MARK: - 4. Bulk Upload Draft Model
@@ -107,6 +107,7 @@ struct DraftItem: Identifiable {
     var isValidating: Bool = true
     var isClothing: Bool = false
     var validationMessage: String = "Checking..."
+    var isCategorizing: Bool = false
 }
 
 // MARK: - 5. Centralized Category Logic

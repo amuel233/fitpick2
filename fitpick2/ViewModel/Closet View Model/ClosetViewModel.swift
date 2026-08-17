@@ -5,6 +5,7 @@
 //  Created by Bryan Gavino on 1/21/26.
 //
 
+import Foundation
 import SwiftUI
 import FirebaseFirestore
 import FirebaseStorage
@@ -49,6 +50,7 @@ class ClosetViewModel: ObservableObject {
     private var historyListener: ListenerRegistration?
     
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-3-pro-image")
+    private lazy var textGenModel = ai.generativeModel(modelName: "gemini-3.7-flash")
 
     @Published var userAvatarURL: String? = nil
     private var userListener: ListenerRegistration?
@@ -298,7 +300,14 @@ class ClosetViewModel: ObservableObject {
     func determineSizeFromAutoMeasurements(width: Double, length: Double, category: String, subCategory: String) async -> String {
         if category == "Top" {
             if width < 19 { return "XS" } else if width < 21 { return "S" } else if width < 23 { return "M" } else if width < 25 { return "L" } else { return "XL" }
-        } else if category == "Bottom" { let waist = Int(width * 2); return "W\(waist)" }
+        } else if category == "Bottom" {
+            let waist = Int(width * 2)
+            return "W\(waist)"
+        } else if category == "Accessories" {
+            return "One Size"
+        } else if category == "Shoes" {
+            return "US Standard"
+        }
         return "Unknown"
     }
 
@@ -436,10 +445,10 @@ class ClosetViewModel: ObservableObject {
             let request = VNClassifyImageRequest { request, error in
                 if let error = error { print("Vision Error: \(error)"); return }
                 guard let results = request.results as? [VNClassificationObservation] else { return }
-                let topResults = results.prefix(3)
+                let topResults = results.prefix(5)
                 let blacklist = ["tree", "plant", "flower", "nature", "vehicle", "car", "food", "animal", "building"]
                 for result in topResults { if blacklist.contains(where: { result.identifier.lowercased().contains($0) }) { isClothing = false; return } }
-                let whitelist = ["clothing", "shirt", "top", "pants", "dress", "jacket", "shoe", "hat", "bag", "accessory", "uniform", "jersey"]
+                let whitelist = ["clothing", "shirt", "top", "pants", "dress", "jacket", "shoe", "hat", "bag", "accessory", "uniform", "jersey", "sunglasses", "glasses", "watch", "belt", "necklace", "bracelet", "ring", "boot", "sneaker", "footwear", "wallet", "purse", "backpack", "cap", "beanie", "scarf", "tie", "sock", "glove"]
                 isClothing = topResults.contains { observation in let id = observation.identifier.lowercased(); return whitelist.contains { id.contains($0) } }
             }
             do { try handler.perform([request]); return isClothing } catch {
@@ -450,6 +459,116 @@ class ClosetViewModel: ObservableObject {
                 #endif
             }
         }.value
+    }
+    
+    // MARK: - 5. Automatic AI Categorization
+    func autoCategorizeClothing(image: UIImage) async -> (category: ClothingCategory, subcategory: String)? {
+        // 1. Try Gemini Multimodal AI
+        if let resized = resizeImage(image: image, targetSize: CGSize(width: 512, height: 512)),
+           let jpegData = resized.jpegData(compressionQuality: 0.8) {
+            let prompt = """
+            You are an expert fashion cataloging AI assistant.
+            Analyze this uploaded image of a clothing item or fashion accessory.
+
+            1. Categorize it into EXACTLY ONE of these 4 categories:
+               - "Top" (e.g. t-shirt, shirt, polo, sweater, hoodie, jacket, coat, blazer, tank top, dress, blouse, cardigan)
+               - "Bottom" (e.g. jeans, pants, trousers, shorts, skirt, sweatpants, leggings, joggers)
+               - "Shoes" (e.g. sneakers, boots, loafers, sandals, heels, dress shoes, flats, slippers, trainers)
+               - "Accessories" (e.g. sunglasses, watch, hat, cap, beanie, belt, bag, backpack, handbag, purse, scarf, jewelry, necklace, bracelet, ring, tie)
+
+            2. Identify the specific subcategory / item type (e.g. "Aviator Sunglasses", "Graphic T-Shirt", "Cargo Pants", "Running Shoes", "Leather Belt", "Gold Watch", "Bucket Hat", "Denim Jacket", "Crossbody Bag").
+
+            Return ONLY a raw JSON object (without markdown fences, backticks, or extra text):
+            {
+              "category": "Top" | "Bottom" | "Shoes" | "Accessories",
+              "subcategory": "specific item name"
+            }
+            """
+            
+            do {
+                let content = ModelContent(role: "user", parts: [
+                    TextPart(prompt),
+                    InlineDataPart(data: jpegData, mimeType: "image/jpeg")
+                ])
+                let response = try await textGenModel.generateContent([content])
+                if let text = response.text {
+                    let cleaned = text
+                        .replacingOccurrences(of: "```json", with: "")
+                        .replacingOccurrences(of: "```", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    if let data = cleaned.data(using: .utf8),
+                       let parsed = try? JSONDecoder().decode(AICategorization.self, from: data) {
+                        let catEnum = parseCategory(parsed.category)
+                        let subCat = parsed.subcategory.trimmingCharacters(in: .whitespacesAndNewlines)
+                        print("✅ AI Categorized: \(catEnum.rawValue) - \(subCat)")
+                        return (catEnum, subCat.isEmpty ? catEnum.rawValue : subCat)
+                    }
+                }
+            } catch {
+                print("⚠️ Gemini Categorization error: \(error.localizedDescription)")
+            }
+        }
+        
+        // 2. Fallback to on-device Apple Vision
+        return classifyWithVision(image: image)
+    }
+
+    private func parseCategory(_ rawString: String) -> ClothingCategory {
+        if let exact = ClothingCategory(rawValue: rawString) { return exact }
+        let lower = rawString.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if lower.contains("top") || lower.contains("shirt") || lower.contains("jacket") || lower.contains("sweater") || lower.contains("hoodie") || lower.contains("dress") || lower.contains("blouse") {
+            return .top
+        } else if lower.contains("bottom") || lower.contains("pant") || lower.contains("jean") || lower.contains("trouser") || lower.contains("short") || lower.contains("skirt") {
+            return .bottom
+        } else if lower.contains("shoe") || lower.contains("sneaker") || lower.contains("boot") || lower.contains("heel") || lower.contains("footwear") {
+            return .shoes
+        } else {
+            return .accessories
+        }
+    }
+
+    func classifyWithVision(image: UIImage) -> (category: ClothingCategory, subcategory: String)? {
+        guard let cgImage = image.cgImage else { return nil }
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        var detectedCategory: ClothingCategory? = nil
+        var detectedSub = "Item"
+        
+        let request = VNClassifyImageRequest { request, _ in
+            guard let results = request.results as? [VNClassificationObservation] else { return }
+            let top = results.prefix(5)
+            for obs in top {
+                let id = obs.identifier.lowercased()
+                if id.contains("sunglass") || id.contains("glasses") {
+                    detectedCategory = .accessories; detectedSub = "Sunglasses"; break
+                } else if id.contains("watch") || id.contains("wrist") {
+                    detectedCategory = .accessories; detectedSub = "Watch"; break
+                } else if id.contains("hat") || id.contains("cap") || id.contains("beanie") || id.contains("helmet") {
+                    detectedCategory = .accessories; detectedSub = "Hat"; break
+                } else if id.contains("bag") || id.contains("backpack") || id.contains("purse") || id.contains("handbag") {
+                    detectedCategory = .accessories; detectedSub = "Bag"; break
+                } else if id.contains("belt") {
+                    detectedCategory = .accessories; detectedSub = "Belt"; break
+                } else if id.contains("shoe") || id.contains("sneaker") || id.contains("boot") || id.contains("sandal") || id.contains("heel") {
+                    detectedCategory = .shoes; detectedSub = "Shoes"; break
+                } else if id.contains("pant") || id.contains("jean") || id.contains("trouser") || id.contains("short") || id.contains("skirt") {
+                    detectedCategory = .bottom; detectedSub = "Pants"; break
+                } else if id.contains("shirt") || id.contains("t-shirt") || id.contains("top") || id.contains("jacket") || id.contains("sweater") || id.contains("coat") || id.contains("dress") {
+                    detectedCategory = .top; detectedSub = "Top"; break
+                }
+            }
+        }
+        
+        do {
+            try handler.perform([request])
+            if let cat = detectedCategory {
+                print("✅ Vision Fallback Categorized: \(cat.rawValue) - \(detectedSub)")
+                return (cat, detectedSub)
+            }
+        } catch {
+            print("Vision fallback classification failed: \(error)")
+        }
+        return nil
     }
     
     // ✅ REFACTORED: Avatar Generation logic properly moved to ViewModel
