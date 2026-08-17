@@ -291,6 +291,7 @@ struct ZoomOverlayView: View {
     @State private var editedSize: String
     @State private var isEditing: Bool = false
     @State private var isSaving: Bool = false
+    @State private var isAutoCategorizingItem: Bool = false
     
     init(item: ClothingItem, onDismiss: @escaping () -> Void, isOwner: Bool, viewModel: ClosetViewModel) {
         self.item = item
@@ -319,6 +320,44 @@ struct ZoomOverlayView: View {
                 VStack(spacing: 12) {
                     if isEditing {
                         VStack(spacing: 15) {
+                            Button(action: {
+                                isAutoCategorizingItem = true
+                                Task {
+                                    if let url = URL(string: item.remoteURL),
+                                       let (data, _) = try? await URLSession.shared.data(from: url),
+                                       let downloadedImg = UIImage(data: data) {
+                                        if let result = await viewModel.autoCategorizeClothing(image: downloadedImg) {
+                                            await MainActor.run {
+                                                editedCategory = result.category
+                                                editedSubCategory = result.subcategory
+                                                if editedSize.isEmpty && result.category == .accessories {
+                                                    editedSize = "One Size"
+                                                }
+                                            }
+                                        }
+                                    }
+                                    await MainActor.run { isAutoCategorizingItem = false }
+                                }
+                            }) {
+                                HStack(spacing: 5) {
+                                    if isAutoCategorizingItem {
+                                        ProgressView().tint(.black).scaleEffect(0.7)
+                                        Text("Categorizing...")
+                                    } else {
+                                        Image(systemName: "sparkles")
+                                        Text("Auto-Categorize")
+                                    }
+                                }
+                                .font(.caption.bold())
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.luxeGoldGradient)
+                                .cornerRadius(8)
+                                .shadow(color: Color.luxeEcru.opacity(0.3), radius: 4)
+                            }
+                            .disabled(isAutoCategorizingItem)
+                            
                             Picker("Category", selection: $editedCategory) {
                                 ForEach(ClothingCategory.allCases) { category in
                                     Text(category.rawValue).tag(category)

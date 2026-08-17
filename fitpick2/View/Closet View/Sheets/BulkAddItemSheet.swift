@@ -39,9 +39,11 @@ struct BulkAddItemSheet: View {
                         ScrollView {
                             LazyVStack(spacing: 16) {
                                 ForEach($vm.draftItems) { $item in
-                                    BulkItemRow(item: $item) {
-                                        withAnimation { vm.removeDraft(id: item.id) }
-                                    }
+                                    BulkItemRow(
+                                        item: $item,
+                                        onAutoCategorize: { vm.autoCategorizeItem(id: item.id) },
+                                        onDelete: { withAnimation { vm.removeDraft(id: item.id) } }
+                                    )
                                 }
                             }
                             .padding()
@@ -92,11 +94,35 @@ struct BulkAddItemSheet: View {
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }.foregroundColor(.luxeEcru)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Set All to Tops") { withAnimation { vm.applyCategoryToAll(.top) } }
-                        Button("Set All to Bottoms") { withAnimation { vm.applyCategoryToAll(.bottom) } }
-                        Button("Set All to Shoes") { withAnimation { vm.applyCategoryToAll(.shoes) } }
-                    } label: { Text("Quick Set").foregroundColor(.luxeFlax) }
+                    HStack(spacing: 10) {
+                        Button(action: {
+                            Task { await vm.autoCategorizeAllItems() }
+                        }) {
+                            HStack(spacing: 4) {
+                                if vm.isAutoCategorizingAll {
+                                    ProgressView().tint(.black).scaleEffect(0.7)
+                                } else {
+                                    Image(systemName: "sparkles")
+                                }
+                                Text("Auto-Categorize")
+                            }
+                            .font(.caption.bold())
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.luxeGoldGradient)
+                            .cornerRadius(8)
+                            .shadow(color: Color.luxeEcru.opacity(0.3), radius: 4)
+                        }
+                        .disabled(vm.isAutoCategorizingAll)
+                        
+                        Menu {
+                            Button("Set All to Tops") { withAnimation { vm.applyCategoryToAll(.top) } }
+                            Button("Set All to Bottoms") { withAnimation { vm.applyCategoryToAll(.bottom) } }
+                            Button("Set All to Shoes") { withAnimation { vm.applyCategoryToAll(.shoes) } }
+                            Button("Set All to Accessories") { withAnimation { vm.applyCategoryToAll(.accessories) } }
+                        } label: { Text("Quick Set").foregroundColor(.luxeFlax) }
+                    }
                 }
             }
         }
@@ -105,6 +131,7 @@ struct BulkAddItemSheet: View {
 
 struct BulkItemRow: View {
     @Binding var item: DraftItem
+    var onAutoCategorize: () -> Void
     var onDelete: () -> Void
     
     var body: some View {
@@ -116,6 +143,11 @@ struct BulkItemRow: View {
             VStack(alignment: .leading, spacing: 10) {
                 if item.isValidating {
                     Text("Validating...").font(.caption).foregroundColor(.luxeEcru)
+                } else if item.isCategorizing {
+                    HStack(spacing: 4) {
+                        ProgressView().tint(Color.luxeFlax).scaleEffect(0.7)
+                        Text("Auto-categorizing...").font(.caption).foregroundColor(.luxeFlax)
+                    }
                 } else if !item.isClothing {
                     // ✅ FIXED: Changed Label to Button to allow manual override
                     Button(action: {
@@ -141,12 +173,31 @@ struct BulkItemRow: View {
                         HStack { Text(item.category.rawValue); Image(systemName: "chevron.down").font(.caption) }
                         .font(.subheadline.bold()).foregroundColor(.luxeBeige).padding(.horizontal, 10).padding(.vertical, 5).background(Color.white.opacity(0.1)).cornerRadius(8)
                     }
+                    
+                    Button(action: onAutoCategorize) {
+                        HStack(spacing: 3) {
+                            if item.isCategorizing {
+                                ProgressView().tint(Color.luxeFlax).scaleEffect(0.6)
+                            } else {
+                                Image(systemName: "sparkles")
+                                Text("Auto")
+                            }
+                        }
+                        .font(.caption2.bold())
+                        .foregroundColor(.luxeFlax)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(item.isCategorizing)
+                    
                     Spacer()
                     Button(action: onDelete) { Image(systemName: "trash").foregroundColor(.red.opacity(0.8)) }
                 }
                 
                 HStack(spacing: 8) {
-                    LuxeTextField(placeholder: "Type (e.g. Jeans)", text: $item.subCategory)
+                    LuxeTextField(placeholder: "Type (e.g. Jeans, Sunglasses)", text: $item.subCategory)
                     LuxeTextField(placeholder: "Size", text: $item.size).frame(width: 70)
                 }
             }

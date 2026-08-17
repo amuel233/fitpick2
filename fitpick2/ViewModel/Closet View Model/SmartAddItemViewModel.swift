@@ -31,6 +31,8 @@ class SmartAddItemViewModel: ObservableObject {
     
     // MARK: - Loading & Validation State
     @Published var isAnalyzingAI = false
+    @Published var isAutoCategorizing = false
+    @Published var aiCategorizedBadge = false
     @Published var isValidating = false
     @Published var showingErrorAlert = false
     @Published var errorMessage = ""
@@ -41,6 +43,27 @@ class SmartAddItemViewModel: ObservableObject {
     }
     
     // MARK: - Logic Methods
+    
+    func autoCategorize() {
+        guard let img = capturedImage else { return }
+        isAutoCategorizing = true
+        
+        Task {
+            if let result = await closetVM.autoCategorizeClothing(image: img) {
+                self.category = result.category.rawValue
+                self.subCategory = result.subcategory
+                self.aiCategorizedBadge = true
+            }
+            self.isAutoCategorizing = false
+            self.performAIAnalysis()
+        }
+    }
+    
+    func proceedToReview() {
+        self.step = 2
+        self.autoCategorize()
+        self.performAIAnalysis()
+    }
     
     func performAIAnalysis() {
         guard capturedImage != nil else { return }
@@ -72,7 +95,7 @@ class SmartAddItemViewModel: ObservableObject {
             
             if !isValid {
                 isValidating = false
-                errorMessage = "This image does not appear to be a clothing item. Please scan a Top, Bottom, or Shoes."
+                errorMessage = "This image does not appear to be a clothing or accessory item. Please scan a Top, Bottom, Shoes, or Accessories."
                 showingErrorAlert = true
                 return
             }
@@ -96,6 +119,7 @@ class SmartAddItemViewModel: ObservableObject {
         capturedImage = nil
         measuredWidth = nil
         measuredLength = nil
+        aiCategorizedBadge = false
         step = 1
     }
 }

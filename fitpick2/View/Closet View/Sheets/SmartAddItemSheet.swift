@@ -64,8 +64,8 @@ struct SmartAddItemSheet: View {
                 HStack(spacing: 40) { MeasurementBadge(title: "Width", value: vm.measuredWidth); MeasurementBadge(title: "Length", value: vm.measuredLength) }
                 HStack(spacing: 20) {
                     Button("Retake") { vm.resetScan() }.foregroundColor(.red.opacity(0.8)).padding()
-                    Button(action: { vm.step = 2; vm.performAIAnalysis() }) {
-                        Text("Next: AI Sizing").fontWeight(.bold).padding().padding(.horizontal, 20).background(Color.luxeGoldGradient).foregroundColor(.black).cornerRadius(12).shadow(color: Color.luxeEcru.opacity(0.3), radius: 8)
+                    Button(action: { vm.proceedToReview() }) {
+                        Text("Next: AI Review & Sizing").fontWeight(.bold).padding().padding(.horizontal, 20).background(Color.luxeGoldGradient).foregroundColor(.black).cornerRadius(12).shadow(color: Color.luxeEcru.opacity(0.3), radius: 8)
                     }
                 }.padding(.top, 10)
             }
@@ -80,14 +80,52 @@ struct SmartAddItemSheet: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 15) {
-                    LuxeSectionHeader(title: "ITEM DETAILS")
+                    HStack {
+                        LuxeSectionHeader(title: "ITEM DETAILS")
+                        Spacer()
+                        Button(action: {
+                            vm.autoCategorize()
+                        }) {
+                            HStack(spacing: 5) {
+                                if vm.isAutoCategorizing {
+                                    ProgressView()
+                                        .tint(.black)
+                                        .scaleEffect(0.7)
+                                    Text("Categorizing...")
+                                } else {
+                                    Image(systemName: "sparkles")
+                                    Text("Auto-Categorize")
+                                }
+                            }
+                            .font(.caption.bold())
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.luxeGoldGradient)
+                            .cornerRadius(8)
+                            .shadow(color: Color.luxeEcru.opacity(0.3), radius: 4)
+                        }
+                        .disabled(vm.isAutoCategorizing)
+                    }
+                    
+                    if vm.aiCategorizedBadge {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkle")
+                                .foregroundColor(.luxeFlax)
+                            Text("Auto-categorized by AI")
+                                .font(.caption2)
+                                .foregroundColor(.luxeFlax)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    
                     HStack {
                         Text("Category").foregroundColor(.gray); Spacer()
                         Picker("", selection: $vm.category) { Text("Top").tag("Top"); Text("Bottom").tag("Bottom"); Text("Shoes").tag("Shoes"); Text("Accessories").tag("Accessories") }.tint(Color.luxeFlax)
                             .onChange(of: vm.category) { _, _ in vm.performAIAnalysis() }
                     }
                     Divider().background(Color.white.opacity(0.1))
-                    HStack { Text("Type").foregroundColor(.gray); Spacer(); TextField("e.g. T-Shirt", text: $vm.subCategory).multilineTextAlignment(.trailing).foregroundColor(.luxeBeige) }
+                    HStack { Text("Type").foregroundColor(.gray); Spacer(); TextField("e.g. Sunglasses, T-Shirt", text: $vm.subCategory).multilineTextAlignment(.trailing).foregroundColor(.luxeBeige) }
                 }.padding().background(.ultraThinMaterial).cornerRadius(16)
                 
                 VStack(alignment: .leading, spacing: 15) {
@@ -111,7 +149,7 @@ struct SmartAddItemSheet: View {
                     } else {
                         Text("Save to Closet").fontWeight(.bold).frame(maxWidth: .infinity).padding().background(Color.luxeGoldGradient).foregroundColor(.black).cornerRadius(12).shadow(color: Color.luxeEcru.opacity(0.3), radius: 8)
                     }
-                }.disabled(vm.isAnalyzingAI || vm.closetVM.isUploading || vm.isValidating).padding(.top, 10)
+                }.disabled(vm.isAnalyzingAI || vm.isAutoCategorizing || vm.closetVM.isUploading || vm.isValidating).padding(.top, 10)
             }.padding(20).environment(\.colorScheme, .dark)
         }
     }

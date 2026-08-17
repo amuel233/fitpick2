@@ -18,6 +18,7 @@ class BulkAddItemViewModel: ObservableObject {
     // MARK: - UI State
     @Published var draftItems: [DraftItem] = []
     @Published var isLoadingImages = false
+    @Published var isAutoCategorizingAll = false
     @Published var isSaving = false
     @Published var saveProgress: Int = 0
     
@@ -46,8 +47,9 @@ class BulkAddItemViewModel: ObservableObject {
             self.draftItems = newItems
             self.isLoadingImages = false
             
-            // Auto-start validation
+            // Auto-start validation and AI categorization
             await validateAllItems()
+            await autoCategorizeAllItems()
         }
     }
     
@@ -62,6 +64,44 @@ class BulkAddItemViewModel: ObservableObject {
             draftItems[index].isValidating = false
             draftItems[index].isClothing = isCloth
             draftItems[index].validationMessage = isCloth ? "Valid" : "Not a clothing item"
+        }
+    }
+    
+    /// Runs AI Auto-Categorization across all valid clothing/accessory items
+    func autoCategorizeAllItems() async {
+        isAutoCategorizingAll = true
+        for index in draftItems.indices {
+            guard draftItems[index].isClothing else { continue }
+            draftItems[index].isCategorizing = true
+            if let result = await closetVM.autoCategorizeClothing(image: draftItems[index].image) {
+                draftItems[index].category = result.category
+                draftItems[index].subCategory = result.subcategory
+                if draftItems[index].size.isEmpty && result.category == .accessories {
+                    draftItems[index].size = "One Size"
+                }
+            }
+            draftItems[index].isCategorizing = false
+        }
+        isAutoCategorizingAll = false
+    }
+
+    /// Auto-categorizes a single draft item
+    func autoCategorizeItem(id: UUID) {
+        guard let index = draftItems.firstIndex(where: { $0.id == id }) else { return }
+        draftItems[index].isCategorizing = true
+        Task {
+            if let result = await closetVM.autoCategorizeClothing(image: draftItems[index].image) {
+                if let i = draftItems.firstIndex(where: { $0.id == id }) {
+                    draftItems[i].category = result.category
+                    draftItems[i].subCategory = result.subcategory
+                    if draftItems[i].size.isEmpty && result.category == .accessories {
+                        draftItems[i].size = "One Size"
+                    }
+                }
+            }
+            if let i = draftItems.firstIndex(where: { $0.id == id }) {
+                draftItems[i].isCategorizing = false
+            }
         }
     }
     
