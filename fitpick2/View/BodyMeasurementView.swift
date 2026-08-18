@@ -32,8 +32,8 @@ struct BodyMeasurementView: View {
                 let screenHeight = geo.size.height
                 
                 ZStack {
-                    // Background: Spotlight Gradient
-                    Color.luxeSpotlightGradient.ignoresSafeArea()
+                    // Background: Liquid Glass Ambient Glow
+                    LiquidGlassBackgroundView()
                     
                     VStack(spacing: 0) {
                         // --- 1. USERNAME SECTION ---
@@ -44,12 +44,19 @@ struct BodyMeasurementView: View {
                             
                             TextField("Enter username", text: $viewModel.username)
                                 .padding(12)
-                                .background(Color.luxeRichCharcoal.opacity(0.8))
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .fill(Color.luxeRichCharcoal.opacity(0.4))
+                                        )
+                                )
                                 .cornerRadius(10)
                                 .foregroundColor(.luxeBeige)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(viewModel.usernameError != nil ? Color.red : Color.luxeEcru.opacity(0.3), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(viewModel.usernameError != nil ? Color.red : (isEditing ? Color.luxeFlax.opacity(0.6) : Color.white.opacity(0.15)), lineWidth: 1)
                                 )
                                 .disabled(!isEditing)
                                 .autocapitalization(.none)
@@ -84,12 +91,10 @@ struct BodyMeasurementView: View {
                                 Text("Auto-Measure")
                             }
                             .font(.subheadline).bold()
-                            .foregroundColor(.luxeBlack)
+                            .foregroundColor(isEditing ? .luxeBlack : .luxeBeige.opacity(0.3))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(isEditing ? Color.luxeGoldGradient : LinearGradient(colors: [Color.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
-                            .cornerRadius(10)
-                            .shadow(color: isEditing ? Color.luxeEcru.opacity(0.3) : .clear, radius: 5)
+                            .liquidGlassAdaptiveButton(isPrimary: isEditing, cornerRadius: 10)
                         }
                         .padding(.horizontal)
                         .disabled(!isEditing)
@@ -119,8 +124,7 @@ struct BodyMeasurementView: View {
                                 .foregroundColor(isEditing ? (selectedSelfie == nil ? .luxeBeige : .green) : .luxeBeige.opacity(0.3))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
-                                .background(Color.luxeRichCharcoal)
-                                .cornerRadius(12)
+                                .liquidGlassPill(cornerRadius: 12)
                         }
                         .padding(.horizontal)
                         .disabled(!isEditing)
@@ -129,6 +133,7 @@ struct BodyMeasurementView: View {
                         
                         // --- 7. SAVE BUTTON ---
                         if isEditing {
+                            let isReadyToSave = !viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty && !viewModel.isCheckingUsername
                             Button(action: {
                                 Task {
                                     if await viewModel.isUsernameUnique() {
@@ -142,17 +147,16 @@ struct BodyMeasurementView: View {
                                         ProgressView().tint(.luxeBlack)
                                     } else {
                                         Text("Save Changes")
-                                            .font(.headline).foregroundColor(.luxeBlack)
+                                            .font(.headline).foregroundColor(isReadyToSave ? .luxeBlack : .white.opacity(0.3))
                                     }
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
-                                .background(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty ? Color.gray : Color.luxeFlax)
-                                .cornerRadius(12)
+                                .liquidGlassAdaptiveButton(isPrimary: isReadyToSave, cornerRadius: 12)
                             }
                             .padding(.horizontal)
                             .padding(.bottom, 15)
-                            .disabled(viewModel.username.trimmingCharacters(in: .whitespaces).isEmpty || viewModel.isCheckingUsername)
+                            .disabled(!isReadyToSave)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         } else {
                             Spacer().frame(height: 15)
@@ -238,7 +242,7 @@ struct BodyMeasurementView: View {
         ZStack {
             Circle()
                 .fill(RadialGradient(
-                    gradient: Gradient(colors: [Color.luxeEcru.opacity(0.12), .clear]),
+                    gradient: Gradient(colors: [Color.luxeFlax.opacity(0.20), Color.luxeEcru.opacity(0.08), .clear]),
                     center: .center,
                     startRadius: 20,
                     endRadius: 180
@@ -354,8 +358,29 @@ struct MeasurementCallout: View {
                 .disabled(isLocked)
             }
             .padding(5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.luxeRichCharcoal)
-                .shadow(color: isFocused ? Color.luxeEcru.opacity(0.3) : .black.opacity(0.2), radius: 2))
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.luxeRichCharcoal.opacity(0.6))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            stops: [
+                                .init(color: isFocused ? Color.luxeFlax : .white.opacity(0.4), location: 0),
+                                .init(color: isFocused ? Color.luxeEcru : Color.luxeEcru.opacity(0.2), location: 1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: isFocused ? Color.luxeEcru.opacity(0.35) : Color.black.opacity(0.3), radius: isFocused ? 4 : 2)
             
             if alignment == .leading {
                 tooltipButton
@@ -368,9 +393,14 @@ struct MeasurementCallout: View {
         Button(action: toggleFocus) {
             Image(systemName: isFocused ? "eye.fill" : "eye")
                 .font(.system(size: 8))
-                .foregroundColor(isFocused ? Color.luxeFlax : Color.luxeBeige.opacity(0.4))
+                .foregroundColor(isFocused ? Color.luxeFlax : Color.luxeBeige.opacity(0.5))
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(Color.luxeBlack))
+                .background(
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Circle().fill(Color.luxeBlack.opacity(0.7)))
+                        .overlay(Circle().stroke(isFocused ? Color.luxeFlax.opacity(0.6) : Color.white.opacity(0.2), lineWidth: 1))
+                )
         }
         .disabled(isLocked)
     }
@@ -403,7 +433,8 @@ struct StatBox: View {
                 }
                 Spacer()
             }
-            .padding(10).background(Color.luxeRichCharcoal).cornerRadius(10)
+            .padding(10)
+            .liquidGlassCard(cornerRadius: 10)
         }
     }
 }

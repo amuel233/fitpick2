@@ -25,9 +25,8 @@ struct WardrobeSelectorView: View {
     @Environment(\.dismiss) var dismiss
     
     // MARK: - Luxe Brand Assets
-    let fitPickGold = Color(red: 0.75, green: 0.60, blue: 0.22)
-    let editorBlack = Color(red: 10/255, green: 10/255, blue: 10/255)
-    let surfaceDark = Color(white: 0.08)
+    let luxeGold = Color.luxeFlax
+    let luxeBronze = Color.luxeEcru
 
     // Unaffected Filter Logic
     private var filteredWardrobe: [WardrobeItem] {
@@ -50,79 +49,95 @@ struct WardrobeSelectorView: View {
         NavigationStack {
             ZStack {
                 // Background
-                editorBlack.ignoresSafeArea()
+                LiquidGlassBackgroundView()
                 
                 VStack(spacing: 0) {
                     // MARK: - EDITORIAL HEADER
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("CLOSET")
-                                .font(.system(size: 14, weight: .black))
-                                .tracking(4)
-                                .foregroundColor(fitPickGold)
+                                .font(.system(size: 15, weight: .bold, design: .serif))
+                                .tracking(3)
+                                .foregroundColor(luxeGold)
                             Text("\(selectedItems.count) PIECES SELECTED")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white.opacity(0.4))
+                                .foregroundColor(Color.luxeBeige.opacity(0.6))
                         }
                         
                         Spacer()
                         
                         Button(action: { dismiss() }) {
                             Text("DONE")
-                                .font(.system(size: 11, weight: .black))
+                                .font(.system(size: 11, weight: .bold))
                                 .tracking(2)
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, 18)
                                 .padding(.vertical, 8)
-                                .background(fitPickGold)
                                 .foregroundColor(.black)
-                                .clipShape(Capsule())
+                                .liquidGlassGoldButton(cornerRadius: 12)
                         }
                     }
-                    .padding(.horizontal, 25)
-                    .padding(.top, 25)
-                    .padding(.bottom, 20)
+                    .padding(.horizontal, 22)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
 
                     // MARK: - LUXE SEARCH BAR
-                    HStack {
+                    HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(fitPickGold.opacity(0.6))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(luxeGold.opacity(0.8))
                         
-                        TextField("", text: $searchText, prompt: Text("Search by subcategory...").foregroundColor(.white.opacity(0.2)))
-                            .font(.system(size: 14, design: .serif)).italic()
+                        TextField("", text: $searchText, prompt: Text("Search by subcategory...").foregroundColor(.gray))
+                            .font(.subheadline)
                             .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 12)
-                    .background(surfaceDark)
-                    .cornerRadius(10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color.white.opacity(0.04))
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.35), .white.opacity(0.08)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
                     .padding(.horizontal, 20)
                     .padding(.bottom, 15)
 
                     if isLoading {
                         Spacer()
-                        ProgressView().tint(fitPickGold)
+                        ProgressView().tint(luxeGold)
                         Spacer()
                     } else if wardrobe.isEmpty {
                         emptyStateView(title: "EMPTY CLOSET", sub: "Import items into your closet first.")
                     } else {
                         ScrollView {
-                            VStack(alignment: .leading, spacing: 30) {
+                            VStack(alignment: .leading, spacing: 25) {
                                 ForEach(categories, id: \.self) { category in
-                                    VStack(alignment: .leading, spacing: 15) {
+                                    VStack(alignment: .leading, spacing: 12) {
                                         Text(category.uppercased())
-                                            .font(.system(size: 10, weight: .black))
-                                            .tracking(3)
-                                            .foregroundColor(fitPickGold)
-                                            .padding(.horizontal, 25)
+                                            .font(.system(size: 11, weight: .bold))
+                                            .tracking(2)
+                                            .foregroundColor(luxeBronze)
+                                            .padding(.horizontal, 22)
                                         
                                         ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 15) {
+                                            HStack(spacing: 14) {
                                                 ForEach(groupedWardrobe[category] ?? []) { item in
                                                     wardrobeCard(item: item)
                                                 }
                                             }
-                                            .padding(.horizontal, 25)
+                                            .padding(.horizontal, 22)
                                         }
                                     }
                                 }
@@ -145,29 +160,48 @@ struct WardrobeSelectorView: View {
         Button(action: { toggleSelection(item: item) }) {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .topTrailing) {
+                    // Frosted card base
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                        )
+                        .frame(width: 140, height: 180)
+                    
                     KFImage(URL(string: item.imageURL))
                         .resizable()
                         .scaledToFill()
                         .frame(width: 140, height: 180)
-                        .background(surfaceDark)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(isSelected ? fitPickGold : Color.white.opacity(0.05), lineWidth: isSelected ? 2 : 1)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(
+                                    isSelected ? AnyShapeStyle(Color.luxeGoldGradient) : AnyShapeStyle(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.35), Color.luxeEcru.opacity(0.15), .white.opacity(0.05)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    ),
+                                    lineWidth: isSelected ? 2.5 : 1
+                                )
                         )
+                        .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 3)
                     
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(fitPickGold)
-                            .background(Circle().fill(.black))
+                            .font(.system(size: 18))
+                            .foregroundColor(luxeGold)
+                            .background(Circle().fill(Color.black.opacity(0.7)))
                             .padding(8)
                     }
                 }
                 
                 Text(item.subcategory.uppercased())
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .tracking(1)
-                    .foregroundColor(isSelected ? fitPickGold : .white.opacity(0.6))
+                    .foregroundColor(isSelected ? luxeGold : Color.luxeBeige.opacity(0.7))
                     .lineLimit(1)
             }
         }
@@ -183,19 +217,24 @@ struct WardrobeSelectorView: View {
     }
 
     private func emptyStateView(title: String, sub: String) -> some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 14) {
             Spacer()
-            Image(systemName: "tshirt")
-                .font(.system(size: 40, weight: .thin))
-                .foregroundColor(fitPickGold.opacity(0.3))
+            Image(systemName: "hanger")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(Color.luxeGoldGradient)
             Text(title)
-                .font(.system(size: 12, weight: .black)).tracking(2)
-                .foregroundColor(fitPickGold)
+                .font(.system(size: 14, weight: .bold, design: .serif))
+                .tracking(2)
+                .foregroundColor(luxeGold)
             Text(sub)
-                .font(.system(size: 13, design: .serif)).italic()
-                .foregroundColor(.white.opacity(0.4))
+                .font(.caption)
+                .foregroundColor(Color.luxeBeige.opacity(0.6))
             Spacer()
         }
+        .padding(32)
+        .liquidGlassCard(cornerRadius: 20)
+        .padding(.horizontal, 24)
+        .padding(.top, 40)
     }
 
     private func fetchUserClothes() {

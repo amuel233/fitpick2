@@ -40,8 +40,7 @@ struct SmartWardrobePulse: View {
                             .foregroundColor(.luxeBlack)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(Color.luxeGoldGradient)
-                            .cornerRadius(10)
+                            .liquidGlassGoldButton(cornerRadius: 10)
                     }
                 }
             } else {
@@ -52,16 +51,14 @@ struct SmartWardrobePulse: View {
 
                 ProgressView(value: Double(usedCount), total: Double(max(totalUploaded,1)))
                     .progressViewStyle(LinearProgressViewStyle(tint: Color.luxeFlax))
-                    .background(Color.luxeBeige.opacity(0.1))
+                    .background(Color.white.opacity(0.1))
                     .cornerRadius(4)
             }
             Spacer()
         }
         .frame(minHeight: 140)
         .padding(Theme.cardPadding)
-        .background(Color.luxeRichCharcoal.opacity(0.8))
-        .cornerRadius(Theme.cornerRadius)
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1))
+        .liquidGlassCard()
         .onAppear(perform: loadPulse)
     }
 

@@ -54,18 +54,9 @@ struct ClosetView: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 
-                // MARK: - LAYER 0: LUXE STUDIO BACKGROUND
-                ZStack {
-                    Color.luxeSpotlightGradient.ignoresSafeArea()
-                    GeometryReader { geo in
-                        ZStack {
-                            Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
-                                .blur(radius: 150).opacity(0.08).offset(x: -150, y: -200)
-                            Circle().fill(Color.luxeFlax).frame(width: 300, height: 300)
-                                .blur(radius: 120).opacity(0.05).offset(x: 200, y: 100)
-                        }
-                    }
-                }.zIndex(0)
+                // MARK: - LAYER 0: LIQUID GLASS AMBIENT BACKGROUND
+                LiquidGlassBackgroundView()
+                    .zIndex(0)
                 
                 // MARK: - LAYER 1: AVATAR HEADER
                 VStack {
@@ -79,12 +70,12 @@ struct ClosetView: View {
                         isSaved: viewModel.isSaved,
                         isGuest: targetUserEmail != nil
                     )
-                    .padding(.top, 10)
+                    .padding(.top, 6)
                     Spacer()
                 }
                 .zIndex(1)
                 
-                // MARK: - LAYER 2: ULTRA-LUXE GLASS DRAWER
+                // MARK: - LAYER 2: ULTRA-LUXE LIQUID GLASS DRAWER
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         
@@ -92,7 +83,7 @@ struct ClosetView: View {
                         VStack(spacing: 0) {
                             // 1. Handle
                             Capsule().fill(Color.luxeGoldGradient)
-                                .frame(width: 40, height: 4).padding(.vertical, 15).shadow(color: .luxeFlax.opacity(0.6), radius: 8)
+                                .frame(width: 44, height: 5).padding(.vertical, 14).shadow(color: .luxeFlax.opacity(0.5), radius: 6)
                             
                             // 2. Actions
                             ClosetActionButtons(
@@ -102,12 +93,12 @@ struct ClosetView: View {
                                 selectedPickerItems: $selectedPickerItems,
                                 onTryOn: { withAnimation { position = .middle } },
                                 isGuest: targetUserEmail != nil
-                            ).padding(.bottom, 20)
+                            ).padding(.bottom, 18)
                             
                             // 3. Filters
-                            ClosetFilterView(selectedCategory: $viewModel.selectedCategory).padding(.bottom, 20)
+                            ClosetFilterView(selectedCategory: $viewModel.selectedCategory).padding(.bottom, 18)
                         }
-                        .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                        .background(Color.clear)
                         
                         // --- CONTENT ---
                         ScrollView {
@@ -120,11 +111,52 @@ struct ClosetView: View {
                             )
                             .padding(.bottom, 220)
                         }
-                        .background(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                        .background(Color.clear)
                     }
+                    .background(
+                        ZStack {
+                            RoundedCorner(radius: 35, corners: [.topLeft, .topRight])
+                                .fill(.ultraThinMaterial)
+                            RoundedCorner(radius: 35, corners: [.topLeft, .topRight])
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.luxeRichCharcoal.opacity(0.70), Color.luxeDeepOnyx.opacity(0.90)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                            RoundedCorner(radius: 35, corners: [.topLeft, .topRight])
+                                .fill(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .white.opacity(0.18), location: 0.0),
+                                            .init(color: .white.opacity(0.03), location: 0.20),
+                                            .init(color: .clear, location: 0.50)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        }
+                    )
                     .clipShape(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]))
-                    .overlay(RoundedCorner(radius: 35, corners: [.topLeft, .topRight]).stroke(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.5))
-                    .shadow(color: .black.opacity(0.5), radius: 30, x: 0, y: -10)
+                    .overlay(
+                        RoundedCorner(radius: 35, corners: [.topLeft, .topRight])
+                            .stroke(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .white.opacity(0.65), location: 0.0),
+                                        .init(color: Color.luxeFlax.opacity(0.40), location: 0.25),
+                                        .init(color: .white.opacity(0.10), location: 0.60),
+                                        .init(color: Color.luxeEcru.opacity(0.30), location: 1.0)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.2
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.45), radius: 25, x: 0, y: -10)
                     .offset(y: (screenHeight * position.offsetMultiplier) + dragOffset)
                     .allowsHitTesting(true)
                     .gesture(
@@ -201,12 +233,11 @@ struct ClosetActionButtons: View {
                         Image(systemName: "sparkles"); Text(selectedItemIDs.count > 0 ? "Try On (\(selectedItemIDs.count))" : "Try On")
                     }
                 }
-                .font(.system(size: 16, weight: .bold, design: .serif)).foregroundColor(.black).frame(height: 54).frame(maxWidth: .infinity)
-                .background(
-                    LinearGradient(colors: selectedItemIDs.isEmpty ? [Color(white: 0.2)] : [.luxeEcru, .luxeFlax, .luxeEcru], startPoint: .topLeading, endPoint: .bottomTrailing)
-                )
-                .cornerRadius(16).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.2), lineWidth: 1))
-                .shadow(color: selectedItemIDs.isEmpty ? .clear : .luxeEcru.opacity(0.4), radius: 10, x: 0, y: 5)
+                .font(.system(size: 16, weight: .bold, design: .serif))
+                .foregroundColor(selectedItemIDs.isEmpty ? .luxeBeige.opacity(0.3) : .black)
+                .frame(height: 54)
+                .frame(maxWidth: .infinity)
+                .liquidGlassAdaptiveButton(isPrimary: !selectedItemIDs.isEmpty, cornerRadius: 16)
             }.disabled(selectedItemIDs.isEmpty || viewModel.isGeneratingTryOn)
 
             if !isGuest {
@@ -218,7 +249,16 @@ struct ClosetActionButtons: View {
 }
 
 struct GlassIconButton: View { let icon: String; let action: () -> Void; var body: some View { Button(action: action) { GlassIconView(icon: icon) } } }
-struct GlassIconView: View { let icon: String; var body: some View { Image(systemName: icon).font(.title3).foregroundColor(.luxeBeige).frame(width: 54, height: 54).background(.ultraThinMaterial).environment(\.colorScheme, .dark).clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5)).shadow(color: .black.opacity(0.2), radius: 5) } }
+struct GlassIconView: View {
+    let icon: String
+    var body: some View {
+        Image(systemName: icon)
+            .font(.title3)
+            .foregroundColor(.luxeBeige)
+            .frame(width: 54, height: 54)
+            .liquidGlassPill(cornerRadius: 16)
+    }
+}
 
 // MARK: - Filters
 struct ClosetFilterView: View {
@@ -241,18 +281,21 @@ struct FilterIcon: View {
     var body: some View {
         Button(action: onTap) {
             image.renderingMode(.template).resizable().scaledToFit().frame(width: 20, height: 20).foregroundColor(isSelected ? .black : .luxeEcru)
-                .frame(width: 48, height: 48).background(isSelected ? Color.luxeEcru : Color.black.opacity(0.3)).background(.ultraThinMaterial).clipShape(Circle())
-                .overlay(Circle().stroke(isSelected ? Color.luxeFlax : Color.white.opacity(0.1), lineWidth: 1)).shadow(color: isSelected ? .luxeEcru.opacity(0.3) : .clear, radius: 8)
+                .frame(width: 48, height: 48)
+                .liquidGlassAdaptiveButton(isPrimary: isSelected, cornerRadius: 24)
         }
     }
 }
 
 // MARK: - Grid (FIXED DIMENSIONS)
 struct InventoryGrid: View {
-    @ObservedObject var viewModel: ClosetViewModel; @Binding var itemToDelete: ClothingItem?; @Binding var showingDeleteAlert: Bool; @Binding var zoomedItem: ClothingItem?; let isOwner: Bool
+    @ObservedObject var viewModel: ClosetViewModel
+    @Binding var itemToDelete: ClothingItem?
+    @Binding var showingDeleteAlert: Bool
+    @Binding var zoomedItem: ClothingItem?
+    let isOwner: Bool
     
-    // ✅ FIX: Reverted to 3 Flexible columns.
-    // This guarantees 3 uniform columns on Pro Max, fixing "broken dimensions".
+    // ✅ 3 Uniform flexible columns
     let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
@@ -262,20 +305,131 @@ struct InventoryGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 12) {
             let items = viewModel.filteredItems
-            if items.isEmpty { VStack(spacing: 15) { Image(systemName: "hanger").font(.system(size: 40)).foregroundColor(.white.opacity(0.1)); Text("Closet is empty").font(.caption).foregroundColor(.gray) }.padding(.top, 50) }
-            else { ForEach(items) { item in InventoryItemCard(item: item, isSelected: viewModel.selectedItemIDs.contains(item.id), isOwner: isOwner, onTap: { viewModel.toggleSelection(item) }, onDelete: { itemToDelete = item; showingDeleteAlert = true }, onLongPress: { let g = UIImpactFeedbackGenerator(style: .medium); g.impactOccurred(); withAnimation { zoomedItem = item } }) } }
-        }.padding(.horizontal, 20).padding(.top, 10)
+            if items.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "hanger")
+                        .font(.system(size: 38, weight: .light))
+                        .foregroundStyle(Color.luxeGoldGradient)
+                    Text("Your Closet is Empty")
+                        .font(.system(size: 15, weight: .semibold, design: .serif))
+                        .foregroundColor(.luxeBeige)
+                    Text("Tap the camera or gallery icons above to add your clothes.")
+                        .font(.caption)
+                        .foregroundColor(.luxeBeige.opacity(0.6))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                .padding(.vertical, 32)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity)
+                .liquidGlassCard(cornerRadius: 20)
+                .padding(.top, 40)
+            } else {
+                ForEach(items) { item in
+                    InventoryItemCard(
+                        item: item,
+                        isSelected: viewModel.selectedItemIDs.contains(item.id),
+                        isOwner: isOwner,
+                        onTap: { viewModel.toggleSelection(item) },
+                        onDelete: {
+                            itemToDelete = item
+                            showingDeleteAlert = true
+                        },
+                        onLongPress: {
+                            let g = UIImpactFeedbackGenerator(style: .medium)
+                            g.impactOccurred()
+                            withAnimation { zoomedItem = item }
+                        }
+                    )
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
     }
 }
 
 struct InventoryItemCard: View {
-    let item: ClothingItem; let isSelected: Bool; let isOwner: Bool; let onTap: () -> Void; let onDelete: () -> Void; let onLongPress: () -> Void
+    let item: ClothingItem
+    let isSelected: Bool
+    let isOwner: Bool
+    let onTap: () -> Void
+    let onDelete: () -> Void
+    let onLongPress: () -> Void
+    
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            CachedImageView(urlString: item.remoteURL).frame(minWidth: 0, maxWidth: .infinity).frame(height: 150).clipped().overlay(Color.black.opacity(isSelected ? 0.4 : 0)).clipShape(RoundedRectangle(cornerRadius: 16)).contentShape(Rectangle()).onTapGesture(perform: onTap).onLongPressGesture(perform: onLongPress)
-            if isSelected { RoundedRectangle(cornerRadius: 16).stroke(Color.luxeGoldGradient, lineWidth: 2).frame(height: 150); Image(systemName: "checkmark.circle.fill").foregroundColor(.luxeFlax).background(Circle().fill(.black)).padding(6) }
-            if isOwner && !isSelected { Button(action: onDelete) { Image(systemName: "xmark").font(.caption2.bold()).foregroundColor(.white.opacity(0.7)).padding(6).background(.ultraThinMaterial).clipShape(Circle()) }.padding(6).frame(maxWidth: .infinity, maxHeight: 150, alignment: .bottomTrailing) }
-        }.overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+            // Frosted glass base backing
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+                .frame(height: 150)
+            
+            CachedImageView(urlString: item.remoteURL)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(height: 150)
+                .clipped()
+                .overlay(Color.black.opacity(isSelected ? 0.35 : 0))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+                .onLongPressGesture(perform: onLongPress)
+            
+            if isSelected {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.luxeGoldGradient, lineWidth: 2.5)
+                    .frame(height: 150)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.luxeFlax)
+                    .background(Circle().fill(Color.black.opacity(0.7)))
+                    .padding(8)
+            }
+            
+            if isOwner && !isSelected {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .frame(width: 26, height: 26)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle().stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.5), .white.opacity(0.1)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 0.8
+                            )
+                        )
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: 150, alignment: .bottomTrailing)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.40), location: 0.0),
+                            .init(color: Color.luxeEcru.opacity(0.25), location: 0.3),
+                            .init(color: .white.opacity(0.08), location: 0.7),
+                            .init(color: Color.luxeFlax.opacity(0.20), location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -305,21 +459,29 @@ struct ZoomOverlayView: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark).ignoresSafeArea().onTapGesture(perform: onDismiss)
+            LiquidGlassBackgroundView()
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
             
-            VStack(spacing: 25) {
+            Rectangle()
+                .fill(.ultraThinMaterial.opacity(0.85))
+                .environment(\.colorScheme, .dark)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+            
+            VStack(spacing: 20) {
                 // 1. Zoomed Image
                 CachedImageView(urlString: item.remoteURL)
                     .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .shadow(color: .black.opacity(0.5), radius: 30)
-                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
-                    .padding()
+                    .frame(maxHeight: UIScreen.main.bounds.height * 0.40)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .liquidGlassCard(cornerRadius: 24)
+                    .padding(.horizontal, 24)
                 
                 // 2. Info / Edit Section
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     if isEditing {
-                        VStack(spacing: 15) {
+                        VStack(spacing: 16) {
                             Button(action: {
                                 isAutoCategorizingItem = true
                                 Task {
@@ -339,22 +501,19 @@ struct ZoomOverlayView: View {
                                     await MainActor.run { isAutoCategorizingItem = false }
                                 }
                             }) {
-                                HStack(spacing: 5) {
+                                HStack(spacing: 6) {
                                     if isAutoCategorizingItem {
-                                        ProgressView().tint(.black).scaleEffect(0.7)
-                                        Text("Categorizing...")
+                                        ProgressView().tint(.black).scaleEffect(0.8)
+                                        Text("Categorizing...").font(.caption.bold())
                                     } else {
                                         Image(systemName: "sparkles")
-                                        Text("Auto-Categorize")
+                                        Text("Auto-Categorize").font(.caption.bold())
                                     }
                                 }
-                                .font(.caption.bold())
                                 .foregroundColor(.black)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.luxeGoldGradient)
-                                .cornerRadius(8)
-                                .shadow(color: Color.luxeEcru.opacity(0.3), radius: 4)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .liquidGlassGoldButton(cornerRadius: 10)
                             }
                             .disabled(isAutoCategorizingItem)
                             
@@ -376,60 +535,99 @@ struct ZoomOverlayView: View {
                             
                             TextField("Size (e.g. M)", text: $editedSize)
                                 .textFieldStyle(GlassTextFieldStyle())
-                                .frame(width: 120)
+                                .frame(width: 130)
                                 .multilineTextAlignment(.center)
-                        }
-                        .padding(.horizontal)
-                        
-                        HStack(spacing: 20) {
-                            Button(action: { withAnimation { isEditing = false } }) {
-                                Image(systemName: "xmark").font(.title3).foregroundColor(.white.opacity(0.7))
-                            }
-                            Button(action: saveChanges) {
-                                if isSaving { ProgressView().tint(.luxeFlax) }
-                                else {
-                                    Image(systemName: "checkmark").font(.title3).foregroundColor(.luxeFlax)
-                                        .padding(8).background(Color.white.opacity(0.1)).clipShape(Circle())
+                            
+                            HStack(spacing: 24) {
+                                Button(action: { withAnimation { isEditing = false } }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .frame(width: 46, height: 46)
+                                        .liquidGlassPill(cornerRadius: 23)
                                 }
-                            }
-                        }.padding(.top, 5)
-                        
-                    } else {
-                        VStack(spacing: 5) {
-                            Text(item.category.rawValue.uppercased())
-                                .font(.caption).bold()
-                                .foregroundColor(.white.opacity(0.6))
-                                .padding(.bottom, 2)
                                 
+                                Button(action: saveChanges) {
+                                    Group {
+                                        if isSaving {
+                                            ProgressView().tint(.black)
+                                        } else {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.black)
+                                        }
+                                    }
+                                    .frame(width: 46, height: 46)
+                                    .liquidGlassGoldButton(cornerRadius: 23)
+                                }
+                                .disabled(isSaving)
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(18)
+                    } else {
+                        VStack(spacing: 8) {
+                            Text(item.category.rawValue.uppercased())
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(Color.luxeEcru)
+                                .tracking(2)
+                            
                             Text(item.subCategory.uppercased())
-                                .font(.title2).fontWeight(.bold)
-                                .foregroundColor(.luxeFlax).tracking(2)
+                                .font(.system(size: 22, weight: .bold, design: .serif))
+                                .foregroundColor(.luxeFlax)
+                                .tracking(2)
                             
                             if !item.size.isEmpty {
-                                Text("SIZE \(item.size)")
-                                    .font(.subheadline).foregroundColor(.luxeBeige)
-                                    .padding(.horizontal, 12).padding(.vertical, 6)
-                                    .background(.ultraThinMaterial).cornerRadius(8)
+                                Text("SIZE \(item.size.uppercased())")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundColor(.luxeBeige)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .liquidGlassPill(cornerRadius: 10)
+                                    .padding(.top, 4)
+                            }
+                            
+                            if isOwner {
+                                Button(action: {
+                                    editedCategory = item.category
+                                    editedSubCategory = item.subCategory
+                                    editedSize = item.size
+                                    withAnimation { isEditing = true }
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "pencil")
+                                        Text("Edit Details")
+                                    }
+                                    .font(.caption.bold())
+                                    .foregroundColor(.luxeFlax)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .liquidGlassPill(cornerRadius: 10)
+                                }
+                                .padding(.top, 8)
                             }
                         }
-                        
-                        if isOwner {
-                            Button(action: {
-                                editedCategory = item.category
-                                editedSubCategory = item.subCategory
-                                editedSize = item.size
-                                withAnimation { isEditing = true }
-                            }) {
-                                HStack(spacing: 6) { Image(systemName: "pencil"); Text("Edit") }
-                                .font(.caption).foregroundColor(.white.opacity(0.5)).padding(.top, 5)
-                            }
-                        }
+                        .padding(20)
                     }
                 }
+                .liquidGlassCard(cornerRadius: 22)
+                .padding(.horizontal, 24)
             }
             
             VStack {
-                HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.luxeBeige)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassPill(cornerRadius: 20)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.top, 50)
+                }
                 Spacer()
             }
         }
@@ -456,11 +654,10 @@ struct ZoomOverlayView: View {
 
 // MARK: - History Views
 struct HistorySheetView: View {
-    @ObservedObject var viewModel: ClosetViewModel; @Binding var isPresented: Bool; @State private var selectedLook: SavedLook?
+    @ObservedObject var viewModel: ClosetViewModel
+    @Binding var isPresented: Bool
+    @State private var selectedLook: SavedLook?
     
-    // ✅ FIX: Changed to Adaptive with min 160.
-    // Result: 2 columns on small/medium phones (Fixes overlap).
-    // Result: 2-3 columns on Pro Max (Looks spaced out).
     let columns = [
         GridItem(.adaptive(minimum: 160), spacing: 15)
     ]
@@ -468,10 +665,28 @@ struct HistorySheetView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.luxeRichCharcoal.ignoresSafeArea()
+                LiquidGlassBackgroundView()
                 ScrollView {
-                    if viewModel.savedLooks.isEmpty { VStack(spacing: 20) { Image(systemName: "photo.stack").font(.system(size: 50)).foregroundColor(.luxeEcru.opacity(0.6)); Text("No saved looks").font(.headline).foregroundColor(.luxeBeige) }.padding(.top, 100) }
-                    else {
+                    if viewModel.savedLooks.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "photo.stack")
+                                .font(.system(size: 48, weight: .light))
+                                .foregroundStyle(Color.luxeGoldGradient)
+                            Text("No Saved Looks Yet")
+                                .font(.system(size: 18, weight: .bold, design: .serif))
+                                .foregroundColor(.luxeBeige)
+                            Text("Generate try-on combinations in your closet and save your favorite outfits here.")
+                                .font(.subheadline)
+                                .foregroundColor(.luxeBeige.opacity(0.6))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                        }
+                        .padding(.vertical, 40)
+                        .padding(.horizontal, 20)
+                        .liquidGlassCard(cornerRadius: 20)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 80)
+                    } else {
                         LazyVGrid(columns: columns, spacing: 15) {
                             ForEach(viewModel.savedLooks) { look in
                                 ZStack(alignment: .topTrailing) {
@@ -479,36 +694,137 @@ struct HistorySheetView: View {
                                         .resizable()
                                         .scaledToFill()
                                         .frame(height: 180)
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.1), lineWidth: 1))
-                                        .contentShape(Rectangle()).onTapGesture { selectedLook = look }
+                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .stroke(
+                                                    LinearGradient(
+                                                        colors: [.white.opacity(0.4), Color.luxeEcru.opacity(0.2), .white.opacity(0.05)],
+                                                        startPoint: .topLeading,
+                                                        endPoint: .bottomTrailing
+                                                    ),
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { selectedLook = look }
                                     
                                     Menu {
-                                        Button("Restore", systemImage: "arrow.counterclockwise") { Task { await viewModel.restoreLook(look); isPresented = false } }
-                                        Button("Delete", systemImage: "trash", role: .destructive) { viewModel.deleteLook(look) }
+                                        Button("Restore", systemImage: "arrow.counterclockwise") {
+                                            Task {
+                                                await viewModel.restoreLook(look)
+                                                isPresented = false
+                                            }
+                                        }
+                                        Button("Delete", systemImage: "trash", role: .destructive) {
+                                            viewModel.deleteLook(look)
+                                        }
                                     } label: {
-                                        Image(systemName: "ellipsis").font(.headline).foregroundColor(.luxeRichCharcoal).padding(8).background(Color.luxeEcru).clipShape(Circle())
-                                    }.padding(6)
+                                        Image(systemName: "ellipsis")
+                                            .font(.subheadline.bold())
+                                            .foregroundColor(.black)
+                                            .padding(8)
+                                            .liquidGlassGoldButton(cornerRadius: 16)
+                                    }
+                                    .padding(8)
                                 }
                             }
-                        }.padding()
+                        }
+                        .padding()
                     }
                 }
             }
-            .navigationTitle("Look History").navigationBarTitleDisplayMode(.inline).toolbarBackground(Color.luxeRichCharcoal, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { isPresented = false }.foregroundColor(.luxeEcru) } }
-            .fullScreenCover(item: $selectedLook) { look in HistoryZoomView(look: look, viewModel: viewModel, parentSheetPresented: $isPresented, onDismiss: { selectedLook = nil }) }
+            .navigationTitle("Look History")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { isPresented = false }
+                        .foregroundColor(.luxeFlax)
+                }
+            }
+            .fullScreenCover(item: $selectedLook) { look in
+                HistoryZoomView(
+                    look: look,
+                    viewModel: viewModel,
+                    parentSheetPresented: $isPresented,
+                    onDismiss: { selectedLook = nil }
+                )
+            }
         }
     }
 }
 
 struct HistoryZoomView: View {
-    let look: SavedLook; @ObservedObject var viewModel: ClosetViewModel; @Binding var parentSheetPresented: Bool; var onDismiss: () -> Void
+    let look: SavedLook
+    @ObservedObject var viewModel: ClosetViewModel
+    @Binding var parentSheetPresented: Bool
+    var onDismiss: () -> Void
+    
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea().onTapGesture { onDismiss() }
-            KFImage(URL(string: look.imageURL)).resizable().scaledToFit()
-            VStack { HStack { Spacer(); Button(action: onDismiss) { Image(systemName: "xmark").font(.title).foregroundColor(.white).padding().padding(.top, 40) } }; Spacer(); HStack(spacing: 16) { Button(action: { viewModel.deleteLook(look); onDismiss() }) { Image(systemName: "trash").font(.title3).foregroundColor(.white).frame(width: 70, height: 60).background(Color(white: 0.15)).cornerRadius(12) }; Button(action: { Task { await viewModel.restoreLook(look); onDismiss(); parentSheetPresented = false } }) { HStack { Image(systemName: "arrow.counterclockwise"); Text("Restore") }.bold().foregroundColor(.black).frame(maxWidth: .infinity).frame(height: 60).background(Color.luxeGoldGradient).cornerRadius(12) } }.padding(.horizontal, 20).padding(.bottom, 50) }
+            LiquidGlassBackgroundView()
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+            
+            Rectangle()
+                .fill(.ultraThinMaterial.opacity(0.85))
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+            
+            KFImage(URL(string: look.imageURL))
+                .resizable()
+                .scaledToFit()
+                .padding()
+            
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.luxeBeige)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassPill(cornerRadius: 20)
+                            .padding(.top, 50)
+                            .padding(.trailing, 20)
+                    }
+                }
+                Spacer()
+                HStack(spacing: 16) {
+                    Button(action: {
+                        viewModel.deleteLook(look)
+                        onDismiss()
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                            .frame(width: 70, height: 60)
+                            .liquidGlassPill(cornerRadius: 14)
+                    }
+                    Button(action: {
+                        Task {
+                            await viewModel.restoreLook(look)
+                            onDismiss()
+                            parentSheetPresented = false
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Restore")
+                        }
+                        .font(.headline.bold())
+                        .foregroundColor(.black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 60)
+                        .liquidGlassGoldButton(cornerRadius: 14)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 50)
+            }
         }
     }
 }
@@ -519,7 +835,27 @@ extension View { func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> 
 
 struct GlassTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
-        configuration.padding(10).background(Color.white.opacity(0.1)).cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.2), lineWidth: 1)).foregroundColor(.white)
+        configuration
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.06))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.4), .white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .foregroundColor(.white)
     }
 }

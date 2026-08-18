@@ -32,24 +32,23 @@ struct ClosetHeaderView: View {
     // Local UI State
     @State private var showZoomedImage = false
     
+    private var cardDisplayHeight: CGFloat {
+        max(390, min(UIScreen.main.bounds.height * 0.44, 490))
+    }
+    
     var body: some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 12) {
             ZStack(alignment: .topTrailing) {
                 
-                // MARK: - MAIN DISPLAY AREA (FROSTED GLASS CARD)
+                // MARK: - MAIN DISPLAY AREA (FROSTED GLASS CARD - MAXIMIZED AREA)
                 ZStack {
-                    // Glass Background
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .environment(\.colorScheme, .dark)
-                    
                     // 1. PRIORITY: RESTORING LOOK (From History)
                     if viewModel.isRestoringLook {
                         VStack(spacing: 10) {
                             ProgressView().tint(Color.luxeEcru)
                             Text("Restoring...").font(.caption).foregroundColor(.luxeEcru)
                         }
-                        .frame(height: 350)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                     // 2. PRIORITY: GENERATING AVATAR (BodyMeasurementViewModel)
                     } else if bodyVM.isGenerating {
@@ -66,70 +65,77 @@ struct ClosetHeaderView: View {
                                      .foregroundColor(.white.opacity(0.7))
                              }
                          }
-                         .frame(height: 350)
+                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                     // 3. PRIORITY: GENERATING TRY-ON (DYNAMIC LOADING)
                     } else if viewModel.isGeneratingTryOn {
                         TryOnLoadingView()
-                            .frame(height: 350)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    // 4. TRY-ON RESULT (FIXED: No Cropping)
+                    // 4. TRY-ON RESULT (MAXIMIZED DISPLAY)
                     } else if let tryOn = tryOnImage {
                         Image(uiImage: tryOn)
                             .resizable()
                             .scaledToFit()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 350)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .layoutPriority(1)
+                            .contentShape(Rectangle())
                             .onTapGesture { showZoomedImage = true }
                         
                     // 5. ERROR MESSAGE
                     } else if let message = tryOnMessage {
-                        VStack {
+                        VStack(spacing: 10) {
                             Image(systemName: "exclamationmark.triangle").font(.largeTitle).foregroundColor(.luxeEcru)
-                            Text(message).font(.caption).foregroundColor(.white).multilineTextAlignment(.center)
+                            Text(message).font(.caption).foregroundColor(.white).multilineTextAlignment(.center).padding(.horizontal)
                         }
-                        .frame(height: 350)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
-                    // 6. EXISTING AVATAR (Default Fallback)
+                    // 6. EXISTING AVATAR (Default Fallback - MAXIMIZED)
                     } else {
                         let avatarToDisplay: String? = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
                         
                         if let urlStr = avatarToDisplay, let url = URL(string: urlStr) {
                             KFImage(url)
-                                .placeholder { ProgressView().tint(Color.luxeEcru).frame(height: 350) }
+                                .placeholder { ProgressView().tint(Color.luxeEcru).frame(maxWidth: .infinity, maxHeight: .infinity) }
                                 .resizable()
                                 .scaledToFit()
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 350)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .contentShape(Rectangle())
                                 .onTapGesture { showZoomedImage = true }
                                 .id(urlStr)
                         } else {
                             // Empty State / Generate Button
-                            // ✅ REFACTORED: Calls ViewModel to handle avatar generation logic
                             Button(action: { Task { await viewModel.generateAvatar(using: bodyVM) } }) {
-                                VStack(spacing: 15) {
-                                    Image(systemName: "sparkles.rectangle.stack").font(.system(size: 50, weight: .light)).foregroundColor(.luxeEcru)
-                                    Text("TAP TO GENERATE AVATAR").font(.headline).foregroundColor(.luxeFlax)
+                                VStack(spacing: 16) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.luxeFlax.opacity(0.12))
+                                            .frame(width: 80, height: 80)
+                                        Image(systemName: "sparkles.rectangle.stack")
+                                            .font(.system(size: 38, weight: .light))
+                                            .foregroundStyle(Color.luxeGoldGradient)
+                                    }
+                                    
+                                    VStack(spacing: 6) {
+                                        Text("TAP TO GENERATE AVATAR")
+                                            .font(.system(size: 14, weight: .bold, design: .serif))
+                                            .foregroundColor(.luxeFlax)
+                                            .tracking(2)
+                                        Text("Create your AI digital twin to try on outfits")
+                                            .font(.caption)
+                                            .foregroundColor(.luxeBeige.opacity(0.6))
+                                    }
                                 }
-                                .frame(maxWidth: .infinity).frame(height: 350)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
                         }
                     }
                 }
-                // CARD STYLING
-                .frame(maxWidth: 380)
-                .frame(minHeight: 350, maxHeight: 500)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(
-                            LinearGradient(colors: [Color.luxeEcru.opacity(0.5), .clear, Color.luxeEcru.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: 1
-                        )
-                )
-                .shadow(color: .black.opacity(0.4), radius: 15, x: 0, y: 10)
-                .padding(.horizontal, 20)
+                // CARD STYLING (LIQUID GLASS & EXPANDED CANVAS)
+                .frame(maxWidth: .infinity)
+                .frame(height: cardDisplayHeight)
+                .liquidGlassCard(cornerRadius: 24)
+                .padding(.horizontal, 14)
                 
                 // MARK: - FLOATING CONTROLS
                 VStack(spacing: 12) {
@@ -138,7 +144,7 @@ struct ClosetHeaderView: View {
                             CircleButton(
                                 icon: "photo.stack",
                                 iconColor: .luxeEcru,
-                                bgColor: Color.black.opacity(0.6)
+                                bgColor: Color.black.opacity(0.4)
                             )
                         }
                     }
@@ -148,7 +154,7 @@ struct ClosetHeaderView: View {
                             CircleButton(
                                 icon: isSaved ? "checkmark" : "arrow.down.to.line",
                                 iconColor: isSaved ? .black : .luxeEcru,
-                                bgColor: isSaved ? .luxeFlax : Color.black.opacity(0.6),
+                                bgColor: isSaved ? .luxeFlax : Color.black.opacity(0.4),
                                 isLoading: isSaving
                             )
                         }
@@ -163,33 +169,30 @@ struct ClosetHeaderView: View {
                                 viewModel.isSaved = false
                             }
                         }) {
-                            CircleButton(icon: "xmark", iconColor: .white, bgColor: Color.black.opacity(0.6))
+                            CircleButton(icon: "xmark", iconColor: .white, bgColor: Color.black.opacity(0.4))
                         }
                     }
                     
                     if !isGuest && tryOnImage == nil && viewModel.userAvatarURL != nil {
-                        // ✅ REFACTORED: Calls ViewModel to handle avatar generation logic
                         Button(action: {
                             Task { await viewModel.generateAvatar(using: bodyVM) }
                         }) {
                             Image(systemName: "sparkles")
                                 .foregroundColor(.black)
-                                .frame(width: 40, height: 40)
-                                .background(Color.luxeGoldGradient)
-                                .clipShape(Circle())
-                                .shadow(color: Color.luxeEcru.opacity(0.3), radius: 5)
-                                .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                                .font(.system(size: 15, weight: .bold))
+                                .frame(width: 42, height: 42)
+                                .liquidGlassGoldButton(cornerRadius: 21)
                         }
                         .disabled(bodyVM.isGenerating)
                     }
                 }
                 .padding(12)
-                .padding(.trailing, 20)
+                .padding(.trailing, 16)
             }
-            .padding(.top, 10)
+            .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
         .fullScreenCover(isPresented: $showZoomedImage) {
             let zoomURL = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
             HeaderZoomView(image: tryOnImage, imageURL: zoomURL, onDismiss: { showZoomedImage = false })
@@ -265,26 +268,33 @@ struct CircleButton: View {
     var isLoading: Bool = false
     
     var body: some View {
-        Circle()
-            .fill(bgColor)
-            .frame(width: 40, height: 40)
-            .background(.ultraThinMaterial)
-            .clipShape(Circle())
-            .overlay(
-                Group {
-                    if isLoading {
-                        ProgressView().tint(iconColor)
-                    } else {
-                        Image(systemName: icon)
-                            .foregroundColor(iconColor)
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                }
+        ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+            Circle()
+                .fill(bgColor)
+            
+            if isLoading {
+                ProgressView().tint(iconColor)
+            } else {
+                Image(systemName: icon)
+                    .foregroundColor(iconColor)
+                    .font(.system(size: 15, weight: .bold))
+            }
+        }
+        .frame(width: 42, height: 42)
+        .clipShape(Circle())
+        .overlay(
+            Circle().stroke(
+                LinearGradient(
+                    colors: [.white.opacity(0.55), Color.luxeEcru.opacity(0.35)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1
             )
-            .overlay(
-                Circle().stroke(Color.white.opacity(0.1), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -296,8 +306,15 @@ struct HeaderZoomView: View {
     
     var body: some View {
         ZStack {
-            // Background tap to dismiss
-            Color.black.ignoresSafeArea()
+            // Liquid Glass Background
+            LiquidGlassBackgroundView()
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+                .zIndex(0)
+            
+            Rectangle()
+                .fill(.ultraThinMaterial.opacity(0.85))
+                .ignoresSafeArea()
                 .onTapGesture(perform: onDismiss)
                 .zIndex(0)
             
@@ -326,12 +343,13 @@ struct HeaderZoomView: View {
                 HStack {
                     Spacer()
                     Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white.opacity(0.8))
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.luxeBeige)
+                            .frame(width: 40, height: 40)
+                            .liquidGlassPill(cornerRadius: 20)
                             .padding(.top, 50)
                             .padding(.trailing, 20)
-                            .shadow(radius: 5)
                     }
                 }
                 Spacer()

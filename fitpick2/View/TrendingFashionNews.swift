@@ -62,30 +62,19 @@ struct TrendingFashionNews: View {
                                         .foregroundColor(.luxeBlack)
                                         .padding(.vertical, 6)
                                         .padding(.horizontal, 12)
-                                        .background(Color.luxeGoldGradient) // Updated branding
-                                        .cornerRadius(6)
+                                        .liquidGlassGoldButton(cornerRadius: 6)
                                 }
                             }
                             .frame(width: 200, alignment: .leading)
                             .padding(12)
-                            .background(Color.luxeRichCharcoal.opacity(0.5)) // Darker sub-card
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
-                            )
+                            .liquidGlassCard(cornerRadius: 12)
                         }
                     }
                 }
             }
         }
         .padding(Theme.cardPadding)
-        .background(Color.luxeRichCharcoal.opacity(0.8)) // Main Luxe card background
-        .cornerRadius(Theme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
-        )
+        .liquidGlassCard()
         .onAppear(perform: loadArticles)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
             loadArticles()
