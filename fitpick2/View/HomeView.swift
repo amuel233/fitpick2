@@ -76,7 +76,7 @@ struct HomeView: View {
             .padding(Theme.cardSpacing)
         }
         .refreshable { viewModel.refreshAll() }
-        .background(Color.luxeSpotlightGradient.edgesIgnoringSafeArea(.all))
+        .background(LiquidGlassBackgroundView())
     }
 }
 
@@ -151,20 +151,14 @@ struct TimeGreetingCard: View {
                             .foregroundColor(.luxeBlack)
                             .padding(.vertical, 10)
                             .padding(.horizontal, 20)
-                            .background(Color.luxeGoldGradient)
-                            .cornerRadius(10)
+                            .liquidGlassGoldButton(cornerRadius: 10)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Theme.cardPadding)
-        .background(Color.luxeRichCharcoal.opacity(0.8))
-        .cornerRadius(Theme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
-        )
+        .liquidGlassCard()
     }
 }
 
@@ -232,8 +226,7 @@ struct GapDetectionCard: View {
                             .foregroundColor(.luxeBlack)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(Color.luxeGoldGradient)
-                            .cornerRadius(10)
+                            .liquidGlassGoldButton(cornerRadius: 10)
                     }
                 } else {
                     let isClickable = !gap.externalURL.isEmpty
@@ -247,20 +240,14 @@ struct GapDetectionCard: View {
                             .foregroundColor(isClickable ? .luxeBlack : .white.opacity(0.3))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
-                            .background(isClickable ? Color.luxeGoldGradient : LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing))
-                            .cornerRadius(10)
+                            .liquidGlassAdaptiveButton(isPrimary: isClickable, cornerRadius: 10)
                     }
                     .disabled(!isClickable)
                 }
             }
         }
         .padding(Theme.cardPadding)
-        .background(Color.luxeRichCharcoal.opacity(0.9))
-        .cornerRadius(Theme.cornerRadius)
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                .stroke(Color.luxeFlax.opacity(0.2), lineWidth: 1)
-        )
+        .liquidGlassCard()
     }
 }
 

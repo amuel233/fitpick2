@@ -41,12 +41,7 @@ struct WeatherAccessoryTip: View {
         }
         .frame(minHeight: 140)
         .padding(Theme.cardPadding)
-        .background(Color.luxeRichCharcoal.opacity(0.8)) // UI CHANGE: Material -> Luxe Charcoal
-        .cornerRadius(Theme.cornerRadius)
-        .overlay( // UI CHANGE: Shadow -> Luxe Stroke
-            RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                .stroke(Color.luxeEcru.opacity(0.2), lineWidth: 1)
-        )
+        .liquidGlassCard()
         .onAppear(perform: loadTip)
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("HomeDidRefresh"))) { _ in
             loadTip()

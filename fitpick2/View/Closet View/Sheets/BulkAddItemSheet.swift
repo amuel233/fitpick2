@@ -21,20 +21,36 @@ struct BulkAddItemSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.luxeSpotlightGradient.ignoresSafeArea()
+                LiquidGlassBackgroundView()
                 
                 VStack {
                     if vm.isLoadingImages {
-                        VStack(spacing: 15) {
-                            ProgressView().tint(Color.luxeEcru).scaleEffect(1.5)
-                            Text("Processing Photos...").foregroundColor(.luxeEcru).font(.caption)
+                        VStack(spacing: 16) {
+                            ProgressView().tint(Color.luxeFlax).scaleEffect(1.3)
+                            Text("Processing Photos...")
+                                .foregroundColor(.luxeFlax)
+                                .font(.caption.bold())
                         }
+                        .padding(32)
+                        .liquidGlassCard(cornerRadius: 20)
+                        .padding(.top, 80)
                     } else if vm.draftItems.isEmpty {
-                        ContentUnavailableView {
-                            Label("No Images", systemImage: "photo.on.rectangle.angled")
-                        } description: {
-                            Text("Try selecting images again.").foregroundColor(.gray)
+                        VStack(spacing: 16) {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 48, weight: .light))
+                                .foregroundStyle(Color.luxeGoldGradient)
+                            Text("No Images Selected")
+                                .font(.system(size: 18, weight: .bold, design: .serif))
+                                .foregroundColor(.luxeBeige)
+                            Text("Try selecting clothing photos from your library again.")
+                                .font(.subheadline)
+                                .foregroundColor(.luxeBeige.opacity(0.6))
+                                .multilineTextAlignment(.center)
                         }
+                        .padding(32)
+                        .liquidGlassCard(cornerRadius: 20)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 60)
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 16) {
@@ -63,8 +79,7 @@ struct BulkAddItemSheet: View {
                             }
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(Color.luxeFlax)
-                            .cornerRadius(12)
+                            .liquidGlassGoldButton(cornerRadius: 14)
                         } else {
                             Button(action: {
                                 vm.saveAllValidItems { presentationMode.wrappedValue.dismiss() }
@@ -73,16 +88,23 @@ struct BulkAddItemSheet: View {
                                     .font(.headline)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 55)
-                                    .background(Color.luxeGoldGradient)
-                                    .foregroundColor(.black)
-                                    .cornerRadius(16)
-                                    .shadow(color: Color.luxeEcru.opacity(0.4), radius: 10, y: 5)
+                                    .liquidGlassGoldButton(cornerRadius: 16)
                             }
                             .disabled(vm.draftItems.filter { $0.isClothing }.isEmpty)
                         }
                     }
                     .padding()
-                    .background(LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom))
+                    .background(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: Color.luxeBlack.opacity(0.85), location: 0.4),
+                                .init(color: Color.luxeBlack, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 }
             }
             .navigationTitle("Review Items")
@@ -91,7 +113,8 @@ struct BulkAddItemSheet: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }.foregroundColor(.luxeEcru)
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                        .foregroundColor(.luxeFlax)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 10) {
@@ -110,9 +133,7 @@ struct BulkAddItemSheet: View {
                             .foregroundColor(.black)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(Color.luxeGoldGradient)
-                            .cornerRadius(8)
-                            .shadow(color: Color.luxeEcru.opacity(0.3), radius: 4)
+                            .liquidGlassGoldButton(cornerRadius: 8)
                         }
                         .disabled(vm.isAutoCategorizingAll)
                         
@@ -121,7 +142,14 @@ struct BulkAddItemSheet: View {
                             Button("Set All to Bottoms") { withAnimation { vm.applyCategoryToAll(.bottom) } }
                             Button("Set All to Shoes") { withAnimation { vm.applyCategoryToAll(.shoes) } }
                             Button("Set All to Accessories") { withAnimation { vm.applyCategoryToAll(.accessories) } }
-                        } label: { Text("Quick Set").foregroundColor(.luxeFlax) }
+                        } label: {
+                            Text("Quick Set")
+                                .font(.caption.bold())
+                                .foregroundColor(.luxeBeige)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .liquidGlassPill(cornerRadius: 8)
+                        }
                     }
                 }
             }
@@ -137,8 +165,17 @@ struct BulkItemRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(uiImage: item.image)
-                .resizable().scaledToFill().frame(width: 80, height: 80).cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(item.isClothing ? Color.luxeEcru.opacity(0.5) : Color.red, lineWidth: item.isClothing ? 1 : 2))
+                .resizable()
+                .scaledToFill()
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(
+                            item.isClothing ? LinearGradient(colors: [.white.opacity(0.4), Color.luxeEcru.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing) : LinearGradient(colors: [.red, .orange], startPoint: .leading, endPoint: .trailing),
+                            lineWidth: item.isClothing ? 1 : 2
+                        )
+                )
             
             VStack(alignment: .leading, spacing: 10) {
                 if item.isValidating {
@@ -149,7 +186,6 @@ struct BulkItemRow: View {
                         Text("Auto-categorizing...").font(.caption).foregroundColor(.luxeFlax)
                     }
                 } else if !item.isClothing {
-                    // ✅ FIXED: Changed Label to Button to allow manual override
                     Button(action: {
                         withAnimation { item.isClothing = true }
                     }) {
@@ -170,8 +206,15 @@ struct BulkItemRow: View {
                     Menu {
                         ForEach(ClothingCategory.allCases, id: \.self) { cat in Button(cat.rawValue) { item.category = cat } }
                     } label: {
-                        HStack { Text(item.category.rawValue); Image(systemName: "chevron.down").font(.caption) }
-                        .font(.subheadline.bold()).foregroundColor(.luxeBeige).padding(.horizontal, 10).padding(.vertical, 5).background(Color.white.opacity(0.1)).cornerRadius(8)
+                        HStack(spacing: 4) {
+                            Text(item.category.rawValue)
+                            Image(systemName: "chevron.down").font(.caption2)
+                        }
+                        .font(.subheadline.bold())
+                        .foregroundColor(.luxeBeige)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .liquidGlassPill(cornerRadius: 8)
                     }
                     
                     Button(action: onAutoCategorize) {
@@ -187,13 +230,20 @@ struct BulkItemRow: View {
                         .foregroundColor(.luxeFlax)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(8)
+                        .liquidGlassPill(cornerRadius: 8)
                     }
                     .disabled(item.isCategorizing)
                     
                     Spacer()
-                    Button(action: onDelete) { Image(systemName: "trash").foregroundColor(.red.opacity(0.8)) }
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 13))
+                            .foregroundColor(.red.opacity(0.85))
+                            .frame(width: 30, height: 30)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.red.opacity(0.3), lineWidth: 0.8))
+                    }
                 }
                 
                 HStack(spacing: 8) {
@@ -202,9 +252,8 @@ struct BulkItemRow: View {
                 }
             }
         }
-        .padding(12).background(.ultraThinMaterial).environment(\.colorScheme, .dark).cornerRadius(16)
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 0.5))
-        // Opacity reflects validity; if manually overridden to true, it becomes fully opaque (1.0)
+        .padding(12)
+        .liquidGlassCard(cornerRadius: 16)
         .opacity(item.isClothing ? 1.0 : 0.6)
     }
 }
@@ -214,7 +263,20 @@ struct LuxeTextField: View {
     @Binding var text: String
     var body: some View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundColor(.gray))
-            .font(.caption).foregroundColor(.white).padding(8).background(Color.black.opacity(0.3)).cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.1), lineWidth: 1))
+            .font(.caption)
+            .foregroundColor(.white)
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
     }
 }

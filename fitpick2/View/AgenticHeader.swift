@@ -32,9 +32,8 @@ struct AgenticHeader: View {
                                             .lineLimit(1)
                                             .padding(.vertical, 8)
                                             .padding(.horizontal, 12)
-                                            .background(Color.luxeGoldGradient) // UI Update: Luxe Theme
+                                            .liquidGlassGoldButton(cornerRadius: 10)
                                             .foregroundColor(.black)
-                                            .cornerRadius(10)
                                     ) {
                                         ForEach(vm.upcomingEvents.indices, id: \.self) { idx in
                                             Text(vm.upcomingEvents[idx])
@@ -102,19 +101,13 @@ struct AgenticHeader: View {
                                 .font(.subheadline.weight(.semibold))
                                 .padding(.vertical, 8)
                                 .padding(.horizontal, 12)
-                                .background(vm.preferredProvider != nil ? Color.luxeBeige.opacity(0.1) : Color.luxeFlax) // UI Update: Luxe Theme
+                                .liquidGlassAdaptiveButton(isPrimary: vm.preferredProvider == nil, cornerRadius: 8)
                                 .foregroundColor(vm.preferredProvider != nil ? .luxeBeige : .black)
-                                .cornerRadius(8)
                         }
                     }
                     .padding(.vertical, 18)
                     .padding(.horizontal, Theme.cardPadding)
-                    .background(Color.luxeRichCharcoal.opacity(0.8)) // UI Update: Luxe Theme
-                    .cornerRadius(Theme.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                            .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
-                    )
+                    .liquidGlassCard()
 
                     if let gap = gap,
                        vm.nextEvent != nil,
@@ -146,18 +139,12 @@ struct AgenticHeader: View {
                             .font(.subheadline.weight(.semibold))
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
-                            .background(Color.luxeGoldGradient)
+                            .liquidGlassGoldButton(cornerRadius: 8)
                             .foregroundColor(.black)
-                            .cornerRadius(8)
                     }
                 }
                 .padding(Theme.cardPadding)
-                .background(Color.luxeRichCharcoal.opacity(0.8))
-                .cornerRadius(Theme.cornerRadius)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                        .stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1)
-                )
+                .liquidGlassCard()
             }
         }
         .frame(minHeight: 140)
