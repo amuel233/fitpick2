@@ -1,3 +1,10 @@
+//
+//  SocialConnectionsView.swift
+//  fitpick2
+//
+//  Created by Karry Raia Oberes on 1/27/26.
+//
+
 import SwiftUI
 
 struct SocialConnectionsView: View {
@@ -45,17 +52,15 @@ struct SocialConnectionsView: View {
                         }
                     }
                     .listRowBackground(Color.clear)
-                    .listRowSeparatorTint(Color.luxeEcru.opacity(0.2))
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
         }
         .background {
-            ZStack {
-                Color.luxeDeepOnyx.ignoresSafeArea()
-                Color.luxeSpotlightGradient.ignoresSafeArea()
-            }
+            LiquidGlassBackgroundView()
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -103,20 +108,18 @@ struct SocialConnectionsView: View {
             
             Spacer()
             
-            Button(action: {
+            LiquidGlassActionButton(
+                title: isFollowing ? "FOLLOWING" : "FOLLOW BACK",
+                textColor: isFollowing ? Color.luxeBeige.opacity(0.75) : nil,
+                isProminent: !isFollowing,
+                width: 116
+            ) {
                 firestoreManager.toggleFollow(currentEmail: firestoreManager.currentEmail ?? "", targetEmail: user.id, isFollowing: isFollowing)
-            }) {
-                Text(isFollowing ? "FOLLOWING" : "FOLLOW BACK")
-                    .font(.system(size: 10, weight: .black))
-                    .padding(.vertical, 8)
-                    .frame(width: 110)
-                    .background(isFollowing ? Color.clear : Color.luxeEcru)
-                    .foregroundColor(isFollowing ? .luxeEcru : .luxeBlack)
-                    .border(Color.luxeEcru, width: 1)
             }
-            .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .liquidGlassCard(cornerRadius: 20)
     }
 
     private var emptyStateView: some View {

@@ -208,6 +208,41 @@ struct LiquidGlassBackgroundView: View {
     }
 }
 
+// MARK: - Unified Action Button
+/// One fixed-size, fixed-shape button used everywhere in the app for
+/// short text actions (EDIT, REMOVE, FOLLOW, FOLLOW BACK, etc).
+///
+/// The width is FIXED, not a minimum — so a button never changes size when
+/// its own label changes between states (e.g. "FOLLOW" -> "FOLLOWING").
+/// `height / 2` is always passed as the corner radius, so every instance
+/// is a true capsule regardless of the height you choose.
+struct LiquidGlassActionButton: View {
+    let title: String
+    var textColor: Color? = nil
+    var isProminent: Bool = false
+    var width: CGFloat = 100
+    var height: CGFloat = 32
+    let action: () -> Void
+
+    private var resolvedColor: Color {
+        textColor ?? (isProminent ? .black : Color.luxeBeige.opacity(0.8))
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10, weight: .black))
+                .tracking(1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundColor(resolvedColor)
+                .frame(width: width, height: height)
+        }
+        .buttonStyle(.plain)
+        .liquidGlassAdaptiveButton(isPrimary: isProminent, cornerRadius: height / 2)
+    }
+}
+
 // MARK: - View Extension Shortcuts
 extension View {
     func liquidGlassCard(cornerRadius: CGFloat = Theme.cornerRadius) -> some View {
