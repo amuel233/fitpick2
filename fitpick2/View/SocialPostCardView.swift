@@ -35,7 +35,7 @@ struct SocialPostCardView: View {
     var body: some View {
         ZStack {
             // --- MAIN CARD CONTENT ---
-            VStack(alignment: .leading, spacing: 15) {
+            VStack(alignment: .leading, spacing: 18) {
                 // --- HEADER ---
                 HStack {
                     let myEmail = firestoreManager.currentEmail ?? ""
@@ -54,77 +54,72 @@ struct SocialPostCardView: View {
                     Spacer()
                     
                     if myEmail == targetEmail {
-                        HStack(spacing: 15) {
-                            Button(action: {
+                        HStack(spacing: 10) {
+                            LiquidGlassActionButton(
+                                title: isEditingCaption ? "CANCEL" : "EDIT",
+                                textColor: isEditingCaption ? Color.luxeBeige.opacity(0.75) : Color.luxeFlax,
+                                width: 76
+                            ) {
                                 editedCaption = post.caption
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     isEditingCaption.toggle()
                                 }
-                            }) {
-                                Text(isEditingCaption ? "CANCEL" : "EDIT")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(isEditingCaption ? .gray : Color.luxeFlax)
                             }
                             
                             if !isEditingCaption {
-                                Button(action: { withAnimation { showingDeleteAlert = true } }) {
-                                    Text("REMOVE")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(Color.luxeBeige.opacity(0.6))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .overlay(Rectangle().stroke(Color.luxeEcru.opacity(0.3), lineWidth: 1))
+                                LiquidGlassActionButton(
+                                    title: "REMOVE",
+                                    textColor: Color.luxeBeige.opacity(0.7),
+                                    width: 76
+                                ) {
+                                    withAnimation { showingDeleteAlert = true }
                                 }
                             }
                         }
                     } else {
-                        Button(action: {
+                        LiquidGlassActionButton(
+                            title: isFollowing ? "FOLLOWING" : "FOLLOW",
+                            isProminent: !isFollowing,
+                            width: 100
+                        ) {
                             firestoreManager.toggleFollow(currentEmail: myEmail, targetEmail: targetEmail, isFollowing: isFollowing)
-                        }) {
-                            Text(isFollowing ? "FOLLOWING" : "FOLLOW")
-                                .font(.system(size: 10, weight: .black))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background {
-                                    if isFollowing {
-                                        Color.clear
-                                    } else {
-                                        Color.luxeGoldGradient
-                                    }
-                                }
-                                .foregroundColor(isFollowing ? .gray : .black)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .stroke(Color.luxeEcru, lineWidth: isFollowing ? 1 : 0)
-                                )
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 18)
                 
                 // --- IMAGE SECTION ---
                 ZStack(alignment: .topTrailing) {
                     AsyncImage(url: URL(string: post.imageUrl)) { phase in
                         switch phase {
-                        case .empty: Rectangle().fill(fitPickDarkGray).frame(width: UIScreen.main.bounds.width - 32, height: 450)
-                        case .success(let image): image.resizable().aspectRatio(contentMode: .fill).frame(width: UIScreen.main.bounds.width - 32, height: 450).clipped()
-                        case .failure: Rectangle().fill(Color.luxeEcru.opacity(0.1)).frame(width: UIScreen.main.bounds.width - 32, height: 450)
+                        case .empty: Rectangle().fill(fitPickDarkGray).frame(width: UIScreen.main.bounds.width - 36, height: 450)
+                        case .success(let image): image.resizable().aspectRatio(contentMode: .fill).frame(width: UIScreen.main.bounds.width - 36, height: 450).clipped()
+                        case .failure: Rectangle().fill(Color.luxeEcru.opacity(0.1)).frame(width: UIScreen.main.bounds.width - 36, height: 450)
                         @unknown default: EmptyView()
                         }
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     
+                    // "Try fit" sparkles button — the clearest Liquid Glass moment,
+                    // floating over live photo content so refraction actually reads.
                     Button(action: { Task { isProcessing = true; await tryFit(); isProcessing = false } }) {
                         ZStack {
                             if isProcessing { ProgressView().tint(.white) }
                             else { Image(systemName: "sparkles").font(.system(size: 18, weight: .bold)) }
                         }
-                        .frame(width: 44, height: 44).background(.ultraThinMaterial).foregroundColor(.white).clipShape(Circle())
-                    }.padding(12).disabled(isProcessing)
-                }.padding(.horizontal)
+                        .frame(width: 44, height: 44)
+                        .foregroundColor(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlassPill(cornerRadius: 22) // 22 = half of 44pt frame, reads as a circle
+                    .padding(12)
+                    .disabled(isProcessing)
+                }
+                .padding(.horizontal, 18)
 
                 // --- LIKES & CAPTION ---
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 10) {
                         Button(action: {
                             if let email = firestoreManager.currentEmail {
                                 let myUsername = firestoreManager.currentUserData?.username ?? "User"
@@ -134,33 +129,31 @@ struct SocialPostCardView: View {
                             Image(systemName: post.safeLikedBy.contains(firestoreManager.currentEmail ?? "") ? "heart.fill" : "heart")
                                 .font(.system(size: 20)).foregroundColor(Color.luxeFlax)
                         }
+                        .buttonStyle(.plain)
                         if post.likes > 0 { instagramStyleLikedView.font(.system(size: 12, weight: .bold)).foregroundColor(Color.luxeBeige) }
                     }
                     
                     if isEditingCaption {
                         VStack(alignment: .trailing, spacing: 10) {
                             TextField("Edit your statement...", text: $editedCaption, axis: .vertical)
-                                .font(.system(size: 14, design: .serif)).padding(12).background(fitPickDarkGray).cornerRadius(4).foregroundColor(Color.luxeBeige)
-                            Button("SAVE CHANGES") { updateCaption() }.font(.system(size: 10, weight: .black)).foregroundColor(Color.luxeFlax)
+                                .font(.system(size: 15, weight: .regular, design: .serif))
+                                .italic()
+                                .padding(14)
+                                .foregroundColor(Color.luxeBeige)
+                                .liquidGlassPill(cornerRadius: 14)
+                            LiquidGlassActionButton(title: "SAVE CHANGES", isProminent: true, width: 116) {
+                                updateCaption()
+                            }
                         }
                     } else if !post.caption.isEmpty {
                         Text(post.caption).font(.system(size: 15, weight: .regular, design: .serif)).italic().lineSpacing(4).foregroundColor(Color.luxeBeige.opacity(0.9))
                     }
                     Text(post.timestamp, style: .relative).font(.system(size: 9, weight: .bold)).tracking(1).foregroundColor(.gray).textCase(.uppercase)
-                }.padding(.horizontal)
-            }
-            .padding(.vertical, 15)
-            .background(Color.clear)
-            .background(fitPickBlack)
-            .overlay(
-                VStack {
-                    Spacer()
-                    Rectangle()
-                        .fill(Color.luxeEcru.opacity(0.1))
-                        .frame(height: 0.5)
-                        .padding(.horizontal)
                 }
-            )
+                .padding(.horizontal, 18)
+            }
+            .padding(.vertical, 18)
+            .liquidGlassCard(cornerRadius: 26)
             .blur(radius: showingDeleteAlert ? 4 : 0)
             .luxeAlert(
                 isPresented: $showingDeleteAlert,
@@ -174,6 +167,8 @@ struct SocialPostCardView: View {
                 }
             )
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .sheet(isPresented: $isShowingPopup) {
             VirtualFittingView(
                     isShowingPopup: $isShowingPopup,

@@ -1,6 +1,13 @@
+//
+//  LuxeAlert.swift
+//  fitpick2
+//
+//  Created by Karry Raia Oberes on 2/17/26.
+//
+
 import SwiftUI
 
-// MARK: - Reusable Luxe Alert Component
+// MARK: - Reusable Luxe Alert Component (Liquid Glass)
 struct LuxeAlert: View {
     let title: String
     let message: String
@@ -11,8 +18,9 @@ struct LuxeAlert: View {
 
     var body: some View {
         ZStack {
-            // Dimmed background
-            Color.luxeBlack.opacity(0.85)
+            // Dimmed, blurred backdrop — glass needs something behind it to refract
+            Color.luxeBlack.opacity(0.55)
+                .background(.ultraThinMaterial)
                 .ignoresSafeArea()
                 .onTapGesture { withAnimation { onCancel() } }
 
@@ -23,20 +31,21 @@ struct LuxeAlert: View {
                     .tracking(3)
                     .padding(.top, 30)
                     .foregroundColor(.luxeFlax)
-                
+
                 // Italicized Serif Message
                 Text(message)
                     .font(.system(size: 13, design: .serif))
                     .italic()
                     .multilineTextAlignment(.center)
                     .padding(25)
-                    .foregroundColor(.luxeBeige.opacity(0.8))
-                
-                Divider().background(Color.luxeEcru.opacity(0.2))
-                
+                    .foregroundColor(.luxeBeige.opacity(0.85))
+
+                Divider()
+                    .background(Color.luxeEcru.opacity(0.25))
+                    .padding(.horizontal, 0)
+
                 // Action Buttons
                 HStack(spacing: 0) {
-                    // NEW: Only show Cancel if a title is provided
                     if !cancelTitle.isEmpty {
                         Button(action: { withAnimation { onCancel() } }) {
                             Text(cancelTitle)
@@ -44,28 +53,32 @@ struct LuxeAlert: View {
                                 .foregroundColor(.gray)
                                 .frame(maxWidth: .infinity, minHeight: 50)
                         }
-                        
+                        .buttonStyle(.plain)
+
                         Divider()
                             .frame(height: 50)
-                            .background(Color.luxeEcru.opacity(0.2))
+                            .background(Color.luxeEcru.opacity(0.25))
                     }
-                    
-                    // Confirm button (Centers itself if Cancel is hidden)
+
                     Button(action: { onConfirm() }) {
                         Text(confirmTitle)
                             .font(.system(size: 11, weight: .black))
                             .foregroundColor(.luxeEcru)
                             .frame(maxWidth: .infinity, minHeight: 50)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .background(Color.luxeRichCharcoal)
             .frame(width: 300)
-            .border(Color.luxeEcru.opacity(0.5), width: 0.5)
-            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            // Liquid Glass card — respects Reduce Transparency automatically
+            .liquidGlassCard(cornerRadius: 28)
+            .transition(.opacity.combined(with: .scale(scale: 0.92)))
         }
     }
 }
+
+// Uses LiquidGlassCardModifier / .liquidGlassCard() from LiquidGlass.swift —
+// make sure that file is included in your target alongside this one.
 
 // MARK: - View Extension
 extension View {

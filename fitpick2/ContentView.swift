@@ -33,10 +33,23 @@ struct MainTabView: View {
     let editorBlack = Color.luxeDeepOnyx
 
     init() {
-        // --- LUXURY TAB BAR STYLING ---
+        // --- LUXURY LIQUID GLASS TAB BAR STYLING ---
         let appearance = UITabBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = .black // Deepest base
+        appearance.configureWithTransparentBackground()
+        
+        // Frosted glass base instead of opaque black, so the ambient
+        // background glow shows through the bar like the rest of the UI
+        appearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+        appearance.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+        
+        // Specular top hairline to echo the glass card border
+        appearance.shadowColor = UIColor.white.withAlphaComponent(0.12)
+        
+        // iOS draws its own highlight pill behind the selected tab icon by
+        // default, which uses a system tint that doesn't match our custom
+        // blur — that mismatch is what causes the "non-uniform" patch under
+        // the selected tab. Clearing it lets our blur be the only background.
+        appearance.selectionIndicatorTintColor = .clear
         
         // Normal (Unselected) State - Muted Silver
         // A middle ground: lighter than gray, but softer than pure white
@@ -62,17 +75,9 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Background of the entire app: Updated to Spotlight Gradient
-            Color.luxeSpotlightGradient.ignoresSafeArea()
-            // Ambient Glows: Using Luxe palette colors for soft depth
-            GeometryReader { geo in
-                ZStack {
-                    Circle().fill(Color.luxeEcru).frame(width: 400, height: 400)
-                        .blur(radius: 150).opacity(0.08).offset(x: -150, y: -200)
-                    Circle().fill(Color.luxeFlax).frame(width: 300, height: 300)
-                        .blur(radius: 120).opacity(0.05).offset(x: 200, y: 100)
-                }
-            }
+            // Background of the entire app: Liquid Glass ambient background
+            // (deep base + spotlight gradient + GPU-rendered ambient orbs)
+            LiquidGlassBackgroundView()
             
             TabView(selection: $appState.selectedTab) {
                 HomeView()
@@ -114,9 +119,9 @@ struct MainTabView: View {
                             .font(.system(size: 14, weight: .black))
                             .foregroundColor(.luxeBlack) // Changed for contrast
                             .padding(10)
-                            .background(Color.luxeGoldGradient) // Updated to Luxe Gradient
-                            .clipShape(Circle())
                     }
+                    .liquidGlassGoldButton(cornerRadius: 18)
+                    .clipShape(Circle())
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 22)

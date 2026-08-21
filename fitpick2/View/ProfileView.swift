@@ -54,11 +54,12 @@ struct ProfileView: View {
                                     .frame(width: 100, height: 100)
                                     .foregroundColor(Color.luxeRichCharcoal)
                             }
-                            // Icon using Luxe Gradient
-                            ZStack {
-                                Circle().fill(Color.luxeGoldGradient).frame(width: 28, height: 28)
-                                Image(systemName: "plus").font(.system(size: 14, weight: .black)).foregroundColor(.black)
-                            }
+                            // Icon using Liquid Glass gold button treatment
+                            Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundColor(.black)
+                                .frame(width: 28, height: 28)
+                                .liquidGlassGoldButton(cornerRadius: 14)
                         }
                     }
                     
@@ -76,22 +77,27 @@ struct ProfileView: View {
                 .padding(.top, 10)
                 
                 // MARK: - IDENTITY SECTION
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 14) {
                     
                     // 1. USERNAME LINE
                     VStack(alignment: .leading, spacing: 4) {
                         if isEditingName {
                             VStack(alignment: .trailing, spacing: 10) {
                                 TextField("Your handle...", text: $tempName)
-                                    .font(.system(size: 16, weight: .bold))
-                                    .padding(12).background(Color.luxeRichCharcoal).cornerRadius(8).foregroundColor(.luxeBeige)
+                                    .font(.system(size: 16, weight: .black))
+                                    .tracking(2)
+                                    .padding(12)
+                                    .foregroundColor(.luxeBeige)
+                                    .liquidGlassPill(cornerRadius: 12)
                                 
-                                HStack(spacing: 15) {
-                                    Button("CANCEL") { withAnimation { isEditingName = false } }.foregroundColor(.gray)
-                                    Button("SAVE") {
+                                HStack(spacing: 10) {
+                                    LiquidGlassActionButton(title: "CANCEL", textColor: Color.luxeBeige.opacity(0.75), width: 76) {
+                                        withAnimation { isEditingName = false }
+                                    }
+                                    LiquidGlassActionButton(title: "SAVE", isProminent: true, width: 76) {
                                         saveProfileUpdate(newName: tempName, newBio: firestoreManager.currentUserData?.bio)
-                                    }.foregroundColor(Color.luxeFlax)
-                                }.font(.system(size: 12, weight: .bold))
+                                    }
+                                }
                             }
                         } else {
                             HStack(alignment: .center) {
@@ -100,13 +106,12 @@ struct ProfileView: View {
                                     .foregroundColor(Color.luxeBeige)
                                     .shimmer()
                                 Spacer()
-                                Button("EDIT") {
+                                LiquidGlassActionButton(title: "EDIT", textColor: Color.luxeFlax, width: 64, height: 28) {
                                     tempName = firestoreManager.currentUserData?.username ?? ""
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { isEditingName = true }
                                 }
-                                .font(.system(size: 10, weight: .bold)).foregroundColor(Color.luxeFlax)
                             }
-                            .frame(height: 20)
+                            .frame(height: 28)
                         }
                     }
                     
@@ -116,18 +121,24 @@ struct ProfileView: View {
                             VStack(alignment: .trailing, spacing: 10) {
                                 ZStack(alignment: .bottomTrailing) {
                                     TextField("Add a bio...", text: $tempBio, axis: .vertical)
-                                        .font(.system(size: 14, design: .serif)).padding(12).background(Color.luxeRichCharcoal).cornerRadius(8).foregroundColor(.luxeBeige)
+                                        .font(.system(size: 14, design: .serif))
+                                        .italic()
+                                        .padding(12)
+                                        .foregroundColor(.luxeBeige)
+                                        .liquidGlassPill(cornerRadius: 12)
                                     Text("\(tempBio.count)/100").font(.system(size: 9, weight: .bold)).foregroundColor(.gray).padding(8)
                                 }
-                                HStack(spacing: 15) {
-                                    Button("CANCEL") { withAnimation { isEditingBio = false } }.foregroundColor(.gray)
-                                    Button("SAVE") {
+                                HStack(spacing: 10) {
+                                    LiquidGlassActionButton(title: "CANCEL", textColor: Color.luxeBeige.opacity(0.75), width: 76) {
+                                        withAnimation { isEditingBio = false }
+                                    }
+                                    LiquidGlassActionButton(title: "SAVE", isProminent: true, width: 76) {
                                         isSaving = true
                                         firestoreManager.updateInlineProfile(newUsername: firestoreManager.currentUserData?.username ?? "", newBio: tempBio, newSelfie: nil) { _, _ in
                                             withAnimation { isEditingBio = false }; isSaving = false
                                         }
-                                    }.foregroundColor(Color.luxeFlax)
-                                }.font(.system(size: 12, weight: .bold))
+                                    }
+                                }
                             }
                         } else {
                             HStack(alignment: .top) {
@@ -137,11 +148,10 @@ struct ProfileView: View {
                                     .foregroundColor(Color.luxeBeige.opacity(0.7))
                                 Spacer()
                                 if !isEditingName {
-                                    Button("EDIT") {
+                                    LiquidGlassActionButton(title: "EDIT", textColor: Color.luxeFlax, width: 64, height: 28) {
                                         tempBio = firestoreManager.currentUserData?.bio ?? ""
                                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { isEditingBio = true }
                                     }
-                                    .font(.system(size: 10, weight: .bold)).foregroundColor(Color.luxeFlax)
                                 }
                             }
                         }
@@ -155,9 +165,11 @@ struct ProfileView: View {
             Rectangle().fill(Color.luxeEcru.opacity(0.2)).frame(height: 1)
             HStack {
                 Text("LOOKBOOK").font(.system(size: 12, weight: .black)).tracking(3)
-                    .foregroundColor(Color.luxeEcru).padding(.leading)
+                    .foregroundColor(Color.luxeEcru)
                 Spacer()
-            }.frame(height: 44).background(Color.luxeDeepOnyx)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
             
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 1) {
@@ -172,7 +184,9 @@ struct ProfileView: View {
                 }
             }
         }
-        .background(Color.luxeDeepOnyx.ignoresSafeArea())
+        .background {
+            LiquidGlassBackgroundView()
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -243,7 +257,9 @@ struct MyPostsScrollView: View {
                     }
                 }
             }
-            .background(Color.luxeDeepOnyx.ignoresSafeArea())
+            .background {
+                LiquidGlassBackgroundView()
+            }
             .onAppear { proxy.scrollTo(startingPost.id, anchor: .top) }
         }
         .navigationBarTitleDisplayMode(.inline)
