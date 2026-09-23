@@ -212,6 +212,11 @@ struct ClosetView: View {
                 Button("Cancel", role: .cancel) {}
             }
             .sheet(isPresented: $showHistory) { HistorySheetView(viewModel: viewModel, isPresented: $showHistory) }
+            .onAppear {
+                Task {
+                    await viewModel.fetchClothingItems()
+                }
+            }
         }
     }
 }

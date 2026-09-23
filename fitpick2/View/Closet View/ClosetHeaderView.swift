@@ -32,8 +32,53 @@ struct ClosetHeaderView: View {
     // Local UI State
     @State private var showZoomedImage = false
     
+    // Reimagine Background UI State
+    @State private var showReimagineSheet = false
+    @State private var backgroundPrompt = ""
+    @State private var reimagineImage: UIImage? = nil
+    @State private var isProcessingReimagine = false
+    @State private var isLoadingAvatarImage = false
+    
     private var cardDisplayHeight: CGFloat {
         max(390, min(UIScreen.main.bounds.height * 0.44, 490))
+    }
+    
+    private func loadAvatarImage() async -> UIImage? {
+        if let tryOn = tryOnImage {
+            return tryOn
+        }
+        guard let urlStr = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL,
+              let url = URL(string: urlStr) else {
+            return nil
+        }
+        
+        if let memoryImage = ImageCache.default.retrieveImageInMemoryCache(forKey: urlStr) {
+            return memoryImage
+        }
+        
+        if ImageCache.default.isCached(forKey: urlStr) {
+            let cached = try? await withCheckedThrowingContinuation { (continuation: CheckedContinuation<UIImage?, Error>) in
+                ImageCache.default.retrieveImage(forKey: urlStr) { result in
+                    switch result {
+                    case .success(let cacheResult):
+                        continuation.resume(returning: cacheResult.image)
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            if let img = cached {
+                return img
+            }
+        }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return UIImage(data: data)
+        } catch {
+            print("Error downloading avatar image: \(error)")
+            return nil
+        }
     }
     
     var body: some View {
@@ -161,6 +206,30 @@ struct ClosetHeaderView: View {
                         .disabled(isSaving || isSaved)
                     }
                     
+                    // Change Background / Reimagine Scene Button
+                    if !isGuest && (tryOnImage != nil || viewModel.userAvatarURL != nil) {
+                        Button(action: {
+                            Task {
+                                isLoadingAvatarImage = true
+                                if let image = await loadAvatarImage() {
+                                    reimagineImage = image
+                                    backgroundPrompt = ""
+                                    showReimagineSheet = true
+                                }
+                                isLoadingAvatarImage = false
+                            }
+                        }) {
+                            CircleButton(
+                                icon: "person.and.background.dotted",
+                                iconColor: .luxeEcru,
+                                bgColor: Color.black.opacity(0.4),
+                                isLoading: isLoadingAvatarImage
+                            )
+                        }
+                        .disabled(isLoadingAvatarImage || bodyVM.isGenerating || viewModel.isGeneratingTryOn)
+                        .accessibilityLabel("Change background")
+                    }
+                    
                     if tryOnImage != nil || tryOnMessage != nil {
                         Button(action: {
                             withAnimation {
@@ -196,6 +265,29 @@ struct ClosetHeaderView: View {
         .fullScreenCover(isPresented: $showZoomedImage) {
             let zoomURL = isGuest ? firestoreManager.currentUserData?.userAvatarURL : viewModel.userAvatarURL
             HeaderZoomView(image: tryOnImage, imageURL: zoomURL, onDismiss: { showZoomedImage = false })
+        }
+        .sheet(isPresented: $showReimagineSheet) {
+            VirtualFittingView(
+                title: "REIMAGINE THE SCENE",
+                isShowingPopup: $showReimagineSheet,
+                backgroundPrompt: $backgroundPrompt,
+                generatedImage: $reimagineImage,
+                isProcessing: $isProcessingReimagine,
+                fitPickBlack: Color.luxeSpotlightGradient,
+                onGenerate: {
+                    Task {
+                        isProcessingReimagine = true
+                        if let current = reimagineImage,
+                           let newImage = await viewModel.reimagineBackground(image: current, prompt: backgroundPrompt) {
+                            reimagineImage = newImage
+                            tryOnImage = newImage
+                            viewModel.generatedTryOnImage = newImage
+                            viewModel.isSaved = false
+                        }
+                        isProcessingReimagine = false
+                    }
+                }
+            )
         }
     }
 }

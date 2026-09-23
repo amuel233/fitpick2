@@ -48,6 +48,7 @@ class ClosetViewModel: ObservableObject {
     private let storage = Storage.storage()
     private var listener: ListenerRegistration?
     private var historyListener: ListenerRegistration?
+    private var authListenerHandle: AuthStateDidChangeListenerHandle?
     
     private lazy var imageGenModel = ai.generativeModel(modelName: "gemini-3-pro-image")
     private lazy var textGenModel = ai.generativeModel(modelName: "gemini-3.7-flash")
@@ -77,27 +78,74 @@ class ClosetViewModel: ObservableObject {
         ImageCache.default.diskStorage.config.expiration = .days(30)
         
         self.targetEmail = targetEmail
-        Task { await fetchClothingItems() }
-        if targetEmail == nil { listenToSavedLooks() }
-        listenToUserProfile()
+        
+        if targetEmail != nil {
+            Task { await fetchClothingItems() }
+            listenToUserProfile()
+        } else {
+            // Listen for Auth state changes to ensure we fetch when user credentials are ready
+            authListenerHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+                guard let self = self else { return }
+                if user != nil {
+                    Task {
+                        await self.fetchClothingItems()
+                        self.listenToSavedLooks()
+                        self.listenToUserProfile()
+                    }
+                }
+            }
+            
+            if Auth.auth().currentUser != nil {
+                Task { await fetchClothingItems() }
+                listenToSavedLooks()
+                listenToUserProfile()
+            }
+        }
     }
     
     deinit {
         listener?.remove()
         historyListener?.remove()
         userListener?.remove()
+        if let handle = authListenerHandle {
+            Auth.auth().removeStateDidChangeListener(handle)
+        }
     }
     
     // MARK: - 1. Data Fetching
     func fetchClothingItems() async {
         guard let email = effectiveEmail else { return }
+        listener?.remove()
         listener = db.collection("clothes")
             .whereField("ownerEmail", isEqualTo: email)
             .addSnapshotListener { [weak self] querySnapshot, _ in
                 guard let self = self else { return }
                 guard let documents = querySnapshot?.documents else { return }
-                self.clothingItems = documents.compactMap { self.mapDocumentToItem($0) }
+                let items = documents.compactMap { self.mapDocumentToItem($0) }
+                self.clothingItems = items
+                
+                // Automatically recover and sync any legacy items saved in users/{uid}/closet that are missing from clothes
+                if self.targetEmail == nil, let user = Auth.auth().currentUser {
+                    Task { await self.syncLegacyClosetItems(existingIDs: Set(items.map { $0.id }), user: user) }
+                }
             }
+    }
+    
+    private func syncLegacyClosetItems(existingIDs: Set<String>, user: FirebaseAuth.User) async {
+        do {
+            let snapshot = try await db.collection("users").document(user.uid).collection("closet").getDocuments()
+            for doc in snapshot.documents {
+                if !existingIDs.contains(doc.documentID) {
+                    var data = doc.data()
+                    if data["ownerEmail"] == nil || (data["ownerEmail"] as? String)?.isEmpty == true {
+                        data["ownerEmail"] = user.email ?? ""
+                    }
+                    try? await db.collection("clothes").document(doc.documentID).setData(data, merge: true)
+                }
+            }
+        } catch {
+            print("⚠️ Error syncing legacy closet items: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Firestore Mapper
@@ -327,14 +375,28 @@ class ClosetViewModel: ObservableObject {
                 ownerEmail: user.email ?? "", dateAdded: Date()
             )
             
-            try await db.collection("users").document(user.uid).collection("closet").document(newItem.id).setData([
-                "id": newItem.id, "remoteURL": newItem.remoteURL, "category": newItem.category.rawValue, "subCategory": newItem.subCategory,
-                "size": newItem.size, "measurements": ["width": width, "length": length], "isAutoMeasured": true,
-                "ownerEmail": newItem.ownerEmail, "createdat": FieldValue.serverTimestamp()
-            ])
+            let itemData: [String: Any] = [
+                "id": newItem.id,
+                "remoteURL": newItem.remoteURL,
+                "category": newItem.category.rawValue,
+                "subCategory": newItem.subCategory,
+                "size": newItem.size,
+                "measurements": ["width": width, "length": length],
+                "isAutoMeasured": true,
+                "ownerEmail": newItem.ownerEmail,
+                "createdat": FieldValue.serverTimestamp()
+            ]
             
-            await MainActor.run { self.clothingItems.append(newItem); self.isUploading = false }
-            print("✅ Smart item saved successfully.")
+            try await db.collection("users").document(user.uid).collection("closet").document(newItem.id).setData(itemData)
+            try await db.collection("clothes").document(newItem.id).setData(itemData)
+            
+            await MainActor.run {
+                if !self.clothingItems.contains(where: { $0.id == newItem.id }) {
+                    self.clothingItems.append(newItem)
+                }
+                self.isUploading = false
+            }
+            print("✅ Smart item saved successfully to both closet and clothes.")
         } catch { print("❌ Error saving smart item: \(error.localizedDescription)"); await MainActor.run { isUploading = false } }
     }
     
@@ -343,6 +405,9 @@ class ClosetViewModel: ObservableObject {
         let updates: [String: Any] = [ "category": newCategory.rawValue, "subCategory": newSubCategory, "subcategory": newSubCategory, "size": newSize ]
         do {
             try await db.collection("clothes").document(item.id).updateData(updates)
+            if let user = Auth.auth().currentUser {
+                try? await db.collection("users").document(user.uid).collection("closet").document(item.id).updateData(updates)
+            }
             await MainActor.run {
                 if let index = clothingItems.firstIndex(where: { $0.id == item.id }) {
                     let oldItem = clothingItems[index]
@@ -357,6 +422,9 @@ class ClosetViewModel: ObservableObject {
     func deleteItem(_ item: ClothingItem) {
         withAnimation { self.clothingItems.removeAll { $0.id == item.id } }
         db.collection("clothes").document(item.id).delete()
+        if let user = Auth.auth().currentUser {
+            db.collection("users").document(user.uid).collection("closet").document(item.id).delete()
+        }
         storage.reference(forURL: item.remoteURL).delete { _ in }
     }
 
@@ -604,6 +672,34 @@ class ClosetViewModel: ObservableObject {
         // PROCESS 3: Sync the generated URL back to the main closet view
         if let newURL = bodyVM.userAvatarURL {
             await MainActor.run { self.userAvatarURL = newURL }
+        }
+    }
+    
+    // MARK: - 6. Reimagine Scene / Background
+    nonisolated func reimagineBackground(image: UIImage, prompt: String) async -> UIImage? {
+        let generativeModel = FirebaseAI.firebaseAI(backend: .agentPlatform()).generativeModel(
+            modelName: "gemini-3-pro-image",
+            generationConfig: GenerationConfig(responseModalities: [.text, .image])
+        )
+
+        let promptParts: [any PartsRepresentable] = [
+            "This is an image that contains no background",
+            image,
+            """
+            Now, change the background of this image based on the user's description.
+            The description: \(prompt).
+            Change the pose of the person accordingly.
+            """
+        ]
+        
+        do {
+            let response = try await generativeModel.generateContent(promptParts)
+            guard let inlineDataPart = response.inlineDataParts.first,
+                  let uiImage = UIImage(data: inlineDataPart.data) else { return nil }
+            return uiImage
+        } catch {
+            print("❌ Reimagine Background Error: \(error.localizedDescription)")
+            return nil
         }
     }
 }

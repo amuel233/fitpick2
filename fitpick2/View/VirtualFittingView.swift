@@ -9,16 +9,35 @@ import SwiftUI
 import UIKit
 
 struct VirtualFittingView: View {
+    var title: String = "THE VIRTUAL FITTING"
     @Binding var isShowingPopup: Bool
     @Binding var backgroundPrompt: String
     @Binding var generatedImage: UIImage?
     @Binding var isProcessing: Bool
     
-    let fitPickBlack: RadialGradient
+    var fitPickBlack: RadialGradient = Color.luxeSpotlightGradient
     var onGenerate: () -> Void
     
     // The FocusState now lives locally inside the sheet's environment
     @FocusState private var isReimagineTextFieldFocused: Bool
+    
+    init(
+        title: String = "THE VIRTUAL FITTING",
+        isShowingPopup: Binding<Bool>,
+        backgroundPrompt: Binding<String>,
+        generatedImage: Binding<UIImage?>,
+        isProcessing: Binding<Bool>,
+        fitPickBlack: RadialGradient = Color.luxeSpotlightGradient,
+        onGenerate: @escaping () -> Void
+    ) {
+        self.title = title
+        self._isShowingPopup = isShowingPopup
+        self._backgroundPrompt = backgroundPrompt
+        self._generatedImage = generatedImage
+        self._isProcessing = isProcessing
+        self.fitPickBlack = fitPickBlack
+        self.onGenerate = onGenerate
+    }
     
     var body: some View {
         VStack(spacing: 25) {
@@ -27,7 +46,7 @@ struct VirtualFittingView: View {
                     .fill(Color.luxeEcru.opacity(0.3))
                     .frame(width: 40, height: 4)
                     .padding(.top, 10)
-                Text("THE VIRTUAL FITTING")
+                Text(title)
                     .font(.system(size: 14, weight: .black))
                     .tracking(3)
                     .padding(.top, 10)
@@ -35,13 +54,35 @@ struct VirtualFittingView: View {
             }
             
             if let uiImage = generatedImage {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: UIScreen.main.bounds.width * 0.85, height: 400)
-                    .clipped()
-                    .liquidGlassCard(cornerRadius: 16)
-                    .shadow(color: Color.luxeFlax.opacity(0.1), radius: 20, x: 0, y: 10)
+                ZStack {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: UIScreen.main.bounds.width * 0.85, height: 400)
+                        .clipped()
+                        .liquidGlassCard(cornerRadius: 16)
+                        .shadow(color: Color.luxeFlax.opacity(0.1), radius: 20, x: 0, y: 10)
+                    
+                    if isProcessing {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.black.opacity(0.45))
+                            .frame(width: UIScreen.main.bounds.width * 0.85, height: 400)
+                        VStack(spacing: 12) {
+                            ProgressView().tint(Color.luxeFlax).scaleEffect(1.3)
+                            Text("REIMAGINING SCENE...")
+                                .font(.system(size: 11, weight: .bold))
+                                .tracking(2)
+                                .foregroundColor(Color.luxeFlax)
+                        }
+                    }
+                }
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.black.opacity(0.3))
+                    ProgressView().tint(Color.luxeEcru)
+                }
+                .frame(width: UIScreen.main.bounds.width * 0.85, height: 400)
             }
             
             VStack(alignment: .leading, spacing: 12) {
